@@ -1,0 +1,15 @@
+# Godot editor/import cache
+.godot/
+
+# Raw downloaded source data: never committed (see docs/DATA_SOURCES.md)
+data/raw/
+
+# Local Godot binary installed by `make setup` (about 146 MB, never committed)
+tools/godot/
+ephemeris/target/
+
+# Cargo build output of the texture preparation tool
+tools/texture-prep/target/
+
+# Cargo build output of the Milestone 2 moon-data tool
+tools/moon-data/target/

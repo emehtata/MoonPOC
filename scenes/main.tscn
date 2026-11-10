@@ -1,0 +1,37 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/moon.tscn" id="1_moon"]
+[ext_resource type="Script" path="res://scripts/moon_camera.gd" id="2_camera"]
+[ext_resource type="Script" path="res://scripts/sun_controller.gd" id="3_sun"]
+
+[ext_resource type="Script" path="res://scripts/sun_disc.gd" id="4_disc"]
+
+[sub_resource type="Environment" id="Environment_space"]
+background_mode = 1
+background_color = Color(0, 0, 0, 1)
+ambient_light_source = 1
+fog_enabled = false
+glow_enabled = false
+
+[node name="Main" type="Node3D"]
+
+[node name="Moon" parent="." instance=ExtResource("1_moon")]
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("2_camera")
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+near = 0.01
+far = 100000.0
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+shadow_enabled = true
+script = ExtResource("3_sun")
+
+[node name="SunDisc" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+script = ExtResource("4_disc")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_space")

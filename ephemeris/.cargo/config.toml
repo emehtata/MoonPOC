@@ -1,0 +1,7 @@
+# No system C toolchain is required: build a static musl binary linked by the
+# rust-lld that ships with the Rust toolchain (self-contained CRT and libc).
+[build]
+target = "x86_64-unknown-linux-musl"
+
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"

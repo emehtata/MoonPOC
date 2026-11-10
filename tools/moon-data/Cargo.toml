@@ -1,0 +1,30 @@
+[package]
+name = "moon-data"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+description = "Offline pipeline: LOLA LDEM_64 elevation levels, the LROC WAC albedo texture and their metadata file"
+publish = false
+
+[lib]
+name = "moon_data"
+path = "src/lib.rs"
+
+[[bin]]
+name = "moon-data"
+path = "src/main.rs"
+
+# Exact versions; transitive dependencies are fixed by Cargo.lock (build with --locked).
+# The build needs no C toolchain: no dependency may have a build script or proc macro,
+# because those need a host linker. For that reason tiff stays at 0.9.1, Cargo.lock holds
+# crc32fast at 1.4.2, and serde/serde_json/sha2 are not used (see README.md).
+[dependencies]
+tiff = "=0.9.1"
+png = { version = "=0.18.1", default-features = false }
+
+[profile.release]
+opt-level = 3
+
+# The tests read the full-size raw files; unoptimised code would take minutes.
+[profile.test]
+opt-level = 3
