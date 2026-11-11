@@ -3,7 +3,7 @@ extends SceneTree
 ## Run with: make perf             (windowed, needs a display; user-run values)
 ##           make perf HEADLESS=1  (headless values only)
 ## Loads scenes/main.tscn unchanged and only sets the camera rig's
-## distance/yaw/pitch. Writes nothing to the project.
+## distance and orbit_basis (reset to identity). Writes nothing to the project.
 
 const MAIN_SCENE := "res://scenes/main.tscn"
 const WARMUP_FRAMES := 120
@@ -13,6 +13,7 @@ const POSITIONS := [
 	["orbit_far", 20000.0],
 	["orbit_default", 6000.0],
 	["surface", 1748.232],
+	["earth_close", 19113.0],  # 3 x R_E from Earth's centre, pivot on Earth (Earth Milestone 2 REQ-17)
 ]
 const DATA_FILES_DIR := "res://assets/elevation/"
 const ALBEDO_FILE := "res://assets/textures/lunar_albedo_4096x2048.png"
@@ -80,9 +81,13 @@ func _run() -> void:
 	var rig := main.get_node("CameraRig")
 	for p in POSITIONS:
 		rig.distance = p[1]
-		rig.yaw_deg = 0.0
-		rig.pitch_deg = 0.0
-		await _measure(p[0], p[1])
+		rig.orbit_basis = Basis.IDENTITY
+		rig.pivot = main.get_node("EarthRoot").global_position if p[0] == "earth_close" else Vector3.ZERO
+		# Earth Milestone 2 REQ-17: every position is measured with the clouds visible, then hidden.
+		for clouds in [true, false]:
+			for layer in ["CloudLower", "CloudUpper"]:
+				main.get_node("EarthRoot/" + layer).visible = clouds
+			await _measure("%s clouds %s" % [p[0], "visible" if clouds else "hidden"], p[1])
 	print("texture memory MiB: %.1f" % (Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0))
 	print("video memory MiB: %.1f" % (Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0))
 	quit(0)
@@ -193,7 +198,7 @@ func _measure(name: String, distance: float) -> void:
 	for d in deltas:
 		total += d
 	print("== %s ==" % name)
-	print("distance: %.3f  yaw: 0  pitch: 0" % distance)
+	print("distance: %.3f  orbit_basis: identity" % distance)
 	print("warm-up frames: %d" % WARMUP_FRAMES)
 	print("sample seconds: %.3f" % seconds)
 	print("frames: %d" % n)

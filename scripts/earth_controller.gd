@@ -35,6 +35,8 @@ func apply_line(data: Dictionary) -> void:
 	var basis := Basis(Vector3(b[0], b[1], b[2]), Vector3(b[3], b[4], b[5]), Vector3(b[6], b[7], b[8])).transposed()
 	_root.global_transform = Transform3D(basis, Vector3(p[0], p[1], p[2]))
 	_root.visible = true
+	for layer in ["CloudLower", "CloudUpper"]:
+		get_node("../" + layer).apply_utc(data["utc"])
 	var m := String(data["utc"]).substr(5, 2).to_int()
 	if m != month:
 		month = m

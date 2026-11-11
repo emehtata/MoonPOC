@@ -83,8 +83,7 @@ func _set_sun(dir_moon: Vector3) -> void:
 
 func _view(lat_deg: float, lon_deg: float, distance: float) -> void:
 	_rig.pivot = _moon.global_position
-	_rig.yaw_deg = lon_deg
-	_rig.pitch_deg = lat_deg
+	_rig.orbit_basis = Basis.looking_at(-(_moon.global_basis * _up(lat_deg, lon_deg)), Vector3.UP)
 	_rig.tilt_deg = 0.0
 	_rig.heading_deg = 0.0
 	_rig.distance = distance

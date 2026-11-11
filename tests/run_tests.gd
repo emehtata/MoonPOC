@@ -10,6 +10,7 @@ extends SceneTree
 ## Checks that need a display (M2 REQ-32) are not here; see the pending list.
 
 const MAIN_SCENE := "res://scenes/main.tscn"
+const CloudCopy := preload("res://tests/cloud_noise_copy.gd")
 const TEXTURE := "res://assets/textures/lunar_albedo_4096x2048.png"
 const DATA_SOURCES := "res://docs/DATA_SOURCES.md"
 const ARCHITECTURE := "res://docs/ARCHITECTURE.md"
@@ -129,6 +130,11 @@ func run_all() -> void:
 	test_data_sources()
 	test_docs_m2()
 	test_earth()
+	var cloud_t0 := Time.get_ticks_msec()
+	test_clouds()
+	test_cloud_sampling()
+	var cloud_ms := Time.get_ticks_msec() - cloud_t0
+	check("REQ-20: headless cloud tests finish in under 10 s (%d ms)" % cloud_ms, cloud_ms < 10000)
 	test_repo_scan()
 	print("RESULT: %d total, %d passed, %d failed" % [_passed + _failed, _passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -1038,13 +1044,13 @@ func test_camera() -> void:
 	var cam := rig.get_node("Camera3D") as Camera3D
 	var ctl = rig
 
-	check("REQ-20: camera near <= 0.01 and far >= 50000",
-		cam.near <= 0.01 and cam.far >= 50000.0, "near %s far %s" % [cam.near, cam.far])
+	check("REQ-20: camera near <= 0.05 and far >= 50000",
+		cam.near <= 0.05 + 1e-6 and cam.far >= 50000.0, "near %s far %s" % [cam.near, cam.far])
 
 	# REQ-21 defaults
-	check("REQ-21: default distance is 6000 and default yaw and pitch are 0",
-		near(ctl.distance, 6000.0, 0.0001) and near(ctl.yaw_deg, 0.0, 0.0001)
-		and near(ctl.pitch_deg, 0.0, 0.0001), "d %s y %s p %s" % [ctl.distance, ctl.yaw_deg, ctl.pitch_deg])
+	check("REQ-21: default distance is 6000 and default orbit_basis is identity",
+		near(ctl.distance, 6000.0, 0.0001) and ctl.orbit_basis.is_equal_approx(Basis.IDENTITY),
+		"d %s basis %s" % [ctl.distance, ctl.orbit_basis])
 	check("REQ-21: default pivot is the Moon center (origin)",
 		vec_near(ctl.pivot, Vector3.ZERO, 0.0001), str(ctl.pivot))
 	check("REQ-21: camera is 6000 from the pivot",
@@ -1072,8 +1078,7 @@ func test_camera() -> void:
 	var right_px: Vector2 = cam.unproject_position(surf_pt)
 	check("REQ-16 grab: 100 px right drag moves (0 N, 0 E) right of screen centre",
 		right_px.x > vp_centre.x, "%s vs %s" % [right_px, vp_centre])
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
 	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
 	send_mouse(mouse_motion(Vector2(0, 100)))
@@ -1081,30 +1086,68 @@ func test_camera() -> void:
 	var down_px: Vector2 = cam.unproject_position(surf_pt)
 	check("REQ-16 grab: 100 px down drag moves (0 N, 0 E) below screen centre",
 		down_px.y > vp_centre.y, "%s vs %s" % [down_px, vp_centre])
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
 
-	# REQ-16 orbit drag: 100 px right gives -20 degrees of yaw (grab rule: camera orbits opposite the drag).
+	# REQ-16 trackball: 100 px right turns the camera offset 20 degrees about the camera's screen up axis,
+	# toward camera-left (grab rule: the camera orbits opposite the drag).
+	var off0: Vector3 = cam.global_position - ctl.pivot
+	var up0: Vector3 = cam.global_basis.y
+	var right0: Vector3 = cam.global_basis.x
 	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
 	send_mouse(mouse_motion(Vector2(100, 0)))
-	check("REQ-16: left drag 100 px right changes yaw by -20 (+/- 0.5)",
-		near(ctl.yaw_deg, -20.0, 0.5), str(ctl.yaw_deg))
-	send_mouse(mouse_motion(Vector2(0, 1000)))
-	check("REQ-16: drag 1000 px down clamps pitch at +89 (dragging down raises pitch)",
-		near(ctl.pitch_deg, 89.0, 0.0001), str(ctl.pitch_deg))
-	check("REQ-16: at pitch +89 the view is not flipped (camera up stays with world up)",
-		cam.global_basis.y.dot(Vector3.UP) > 0.0, str(cam.global_basis.y))
-	send_mouse(mouse_motion(Vector2(0, -3000)))
-	check("REQ-16: drag up clamps pitch at -89",
-		near(ctl.pitch_deg, -89.0, 0.0001), str(ctl.pitch_deg))
-	check("REQ-16: pitch-clamped camera still at distance 6000",
+	var off1: Vector3 = cam.global_position - ctl.pivot
+	check("REQ-16: left drag 100 px right turns the camera offset 20 degrees (+/- 0.5) about the screen up axis",
+		near(rad_to_deg(off0.angle_to(off1)), 20.0, 0.5)
+		and absf((off0.cross(off1)).normalized().dot(up0)) > 0.9999,
+		"angle %s axis dot %s" % [rad_to_deg(off0.angle_to(off1)), (off0.cross(off1)).normalized().dot(up0)])
+	check("REQ-16: that 100 px right drag moves the camera toward camera-left",
+		off1.dot(right0) < 0.0, "offset %s right %s" % [off1, right0])
+	check("REQ-16: left drag 100 px right keeps the distance to the pivot at 6000 (+/- 0.01)",
 		near(cam.global_position.distance_to(ctl.pivot), 6000.0, 0.01))
 	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, false))
-	var yaw_before: float = ctl.yaw_deg
+
+	# REQ-16 (no pole stop): 1000 px down in steps of 10 px turns the offset 200 degrees about the
+	# screen right axis, passes over the pole, and has no step over 2.5 degrees and no NaN.
+	ctl.orbit_basis = Basis.IDENTITY
+	ctl._apply()
+	var start_off: Vector3 = cam.global_position - ctl.pivot
+	var axis_right: Vector3 = cam.global_basis.x
+	var prev_off := start_off
+	var total_deg := 0.0
+	var max_step_deg := 0.0
+	var all_finite := true
+	var over_pole := false
+	var axis_drift := 0.0
+	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
+	for i in 100:
+		send_mouse(mouse_motion(Vector2(0, 10)))
+		var cur_off: Vector3 = cam.global_position - ctl.pivot
+		var step_deg := rad_to_deg(prev_off.angle_to(cur_off))
+		total_deg += step_deg
+		max_step_deg = maxf(max_step_deg, step_deg)
+		all_finite = all_finite and cur_off.is_finite() and is_finite(step_deg)
+		over_pole = over_pole or absf(cur_off.normalized().y) > 0.9998
+		axis_drift = maxf(axis_drift, absf(cur_off.dot(axis_right) - start_off.dot(axis_right)))
+		prev_off = cur_off
+	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, false))
+	check("REQ-16: 1000 px drag down in 10 px steps turns the offset 200 degrees (+/- 1) in total",
+		near(total_deg, 200.0, 1.0), str(total_deg))
+	check("REQ-16: the 1000 px drag down passes over the pole (offset reaches the Y axis)",
+		over_pole)
+	check("REQ-16: no 10 px step of the 1000 px drag turns the view more than 2.5 degrees, and no NaN",
+		max_step_deg <= 2.5 and all_finite, "max step %s finite %s" % [max_step_deg, all_finite])
+	check("REQ-16: the 1000 px drag down turns about the screen right axis (right component kept, within 0.01 km)",
+		axis_drift < 0.01, str(axis_drift))
+	check("REQ-16: the 1000 px drag down keeps the distance to the pivot at 6000 (+/- 0.01)",
+		near(cam.global_position.distance_to(ctl.pivot), 6000.0, 0.01))
+	ctl.orbit_basis = Basis.IDENTITY
+	ctl._apply()
+
+	var basis_before: Basis = ctl.orbit_basis
 	send_mouse(mouse_motion(Vector2(200, 0)))
 	check("REQ-16: motion after button release does not orbit",
-		near(ctl.yaw_deg, yaw_before, 0.0001), str(ctl.yaw_deg))
+		ctl.orbit_basis.is_equal_approx(basis_before), str(ctl.orbit_basis))
 
 	# M3 REQ-9 (Revision 3): distance * f^(+1 in, -1 out), f = 0.95 above 500 km altitude, sqrt(0.95) at or below it.
 	ctl.distance = 6000.0
@@ -1173,8 +1216,7 @@ func test_camera() -> void:
 	# Pivot at (500, 0, 0), 300 notches in: the camera stays at 1748.232 or more from the Moon's centre.
 	ctl.pivot = Vector3(500, 0, 0)
 	ctl.distance = 3000.0
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
 	for i in 300:
 		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
@@ -1188,8 +1230,7 @@ func test_camera() -> void:
 	# REQ-15 orbit about an exported pivot that is not the origin.
 	ctl.pivot = Vector3(10, 0, 0)
 	ctl.distance = 6000.0
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
 	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
 	send_mouse(mouse_motion(Vector2(50, 20)))
@@ -1249,22 +1290,25 @@ func test_m3_camera() -> void:
 	ctl.heading_deg = 0.0
 	ctl.distance = 6000.0
 	ctl.pivot = Vector3.ZERO
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
 
 	# M3 REQ-10: at distance 1748.232 (altitude 10.832) the rates are scaled by 10.832 / 4262.6.
+	# Trackball (M1 REQ-16): the camera offset turns 0.508 degrees about the camera's screen up axis.
 	ctl.distance = 1748.232
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
+	var m3_off0: Vector3 = cam.global_position - ctl.pivot
+	var m3_up0: Vector3 = cam.global_basis.y
 	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
 	send_mouse(mouse_motion(Vector2(1000, 0)))
 	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, false))
-	check("M3 REQ-10: at 1748.232, left drag 1000 px changes yaw by 0.508 (+/- 0.005)",
-		near(absf(ctl.yaw_deg), 0.508, 0.005), str(ctl.yaw_deg))
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	var m3_off1: Vector3 = cam.global_position - ctl.pivot
+	var m3_angle := rad_to_deg(m3_off0.angle_to(m3_off1))
+	check("M3 REQ-10: at 1748.232, left drag 1000 px turns the camera offset 0.508 degrees (+/- 0.005) about the screen up axis",
+		near(m3_angle, 0.508, 0.005) and absf((m3_off0.cross(m3_off1)).normalized().dot(m3_up0)) > 0.9999,
+		"angle %s" % m3_angle)
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
 	var right: Vector3 = cam.global_basis.x
 	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, true))
@@ -1317,10 +1361,9 @@ func test_m3_shadows() -> void:
 			near(sun.directional_shadow_max_distance, case[1], 0.5), str(sun.directional_shadow_max_distance))
 	ctl.pivot = Vector3(500, 0, 0)
 	ctl.distance = 3000.0
-	ctl.yaw_deg = 0.0
-	ctl.pitch_deg = 0.0
+	ctl.orbit_basis = Basis.IDENTITY
 	ctl._apply()
-	var d_c := cam.global_position.distance_to(moon.global_position)
+	var d_c :=cam.global_position.distance_to(moon.global_position)
 	check("M3 REQ-6 (pivot offset): pivot (500, 0, 0), distance 3000 gives S(D_c) with D_c from the centre (+/- 0.5)",
 		near(sun.directional_shadow_max_distance, _shadow_distance_expected(d_c), 0.5),
 		"D_c %s max %s" % [d_c, sun.directional_shadow_max_distance])
@@ -1685,8 +1728,9 @@ func test_earth() -> void:
 	for c in er.get_children():
 		kids.append(str(c.name))
 	kids.sort()
-	check("earth REQ-7: EarthRoot children are exactly EarthController and EarthSurface",
-		kids == ["EarthController", "EarthSurface"], str(kids))
+	# Earth Milestone 2 REQ-1 extends this list with the two cloud nodes.
+	check("earth REQ-7: EarthRoot children are exactly EarthController, EarthSurface, CloudLower and CloudUpper",
+		kids == ["CloudLower", "CloudUpper", "EarthController", "EarthSurface"], str(kids))
 	check("earth REQ-7: EarthSurface is a MeshInstance3D with a SphereMesh", surf is MeshInstance3D and surf.mesh is SphereMesh)
 	check("earth REQ-7: EarthRoot is not under the camera rig", not main.get_node("CameraRig").is_ancestor_of(er))
 	var scene_text := FileAccess.get_file_as_string("res://scenes/main.tscn").to_lower()
@@ -1703,7 +1747,7 @@ func test_earth() -> void:
 
 	# REQ-11: clip planes.
 	var cam := main.get_node("CameraRig/Camera3D") as Camera3D
-	check("earth REQ-11: camera near plane <= 0.01", cam.near <= 0.01, str(cam.near))
+	check("earth REQ-11: camera near plane <= 0.05", cam.near <= 0.05 + 1e-6, str(cam.near))
 	check("earth REQ-11: camera far plane >= 440000", cam.far >= 440000.0, str(cam.far))
 
 	# REQ-9: applied line sets position and orientation.
@@ -1872,3 +1916,394 @@ func test_earth() -> void:
 	check("earth REQ-24: ARCHITECTURE.md describes EarthRoot, its children and the helper-to-Earth data path",
 		arch.contains("EarthRoot") and arch.contains("EarthSurface") and arch.contains("EarthController")
 		and arch.contains("--stream") and arch.contains("earth_pos_godot"))
+
+# ---------------------------------------------------------------- Earth Milestone 2: clouds
+# Checks that need the shader to evaluate opacity (seam, poles, coverage, density, correlation, edge width,
+# day/night brightness, frame draw calls and frame time) are not here: the headless dummy renderer does not run the
+# shader. They are reported as pending in the tester report.
+
+const CLOUD_LOWER_RATE := -9.0e-5
+const CLOUD_UPPER_RATE := 2.6938e-4
+const CLOUD_J2000_UNIX := 946728000.0
+const CLOUD_SHADER := "res://shaders/cloud.gdshader"
+const CLOUD_SCRIPT := "res://scripts/cloud_layer.gd"
+const CLOUD_ARCH_SECTION := "### Earth clouds (Earth Milestone 2)"
+const CLOUD_T0 := "2026-11-10T00:00:00Z"  # fake helper line of the spec
+const CLOUD_SPREAD := 0.13  # shader default (checked against the shader source in test_cloud_sampling)
+const CLOUD_SOFTNESS := 0.25  # shader default (checked against the shader source in test_cloud_sampling)
+
+
+func strip_comments(text: String, marker: String) -> String:
+	var out := PackedStringArray()
+	for line in text.split("\n"):
+		var cut := line.find(marker)
+		out.append(line.substr(0, cut) if cut >= 0 else line)
+	return "\n".join(out)
+
+
+func regex_hit(text: String, pattern: String) -> bool:
+	var rx := RegEx.new()
+	rx.compile(pattern)
+	return rx.search(text) != null
+
+
+func wrap_deg(d: float) -> float:
+	return fposmod(d + 180.0, 360.0) - 180.0
+
+
+func test_clouds() -> void:
+	var main := spawn_main()
+	var er := main.get_node("EarthRoot") as Node3D
+	var surf := er.get_node("EarthSurface") as MeshInstance3D
+	var lo = er.get_node("CloudLower")
+	var up = er.get_node("CloudUpper")
+	var nodes := [lo, up]
+	var names := ["CloudLower", "CloudUpper"]
+	var radii := [6373.0, 6381.0]
+	var lo_mat := lo.material_override as ShaderMaterial
+	var up_mat := up.material_override as ShaderMaterial
+	var mats := [lo_mat, up_mat]
+	var surf_sm := surf.mesh as SphereMesh
+
+	# REQ-1: nodes, parent, radius, tessellation, hidden before the first line, no shadows, fixed rotation.
+	for i in 2:
+		var n = nodes[i]
+		var sm := n.mesh as SphereMesh
+		var is_shell: bool = n is MeshInstance3D and sm != null and n.get_parent() == er
+		check("clouds REQ-1: %s is a MeshInstance3D with a SphereMesh, child of EarthRoot" % names[i], is_shell)
+		if sm == null:
+			continue
+		var r_eff: float = sm.radius * n.global_transform.basis.x.length() * er.global_transform.basis.x.length()
+		check("clouds REQ-1: %s radius %.1f +/- 0.5 units" % [names[i], radii[i]],
+			near(r_eff, radii[i], 0.5), str(r_eff))
+		check("clouds REQ-1: %s has at least 128 radial segments and 64 rings" % names[i],
+			sm.radial_segments >= 128 and sm.rings >= 64, "%d, %d" % [sm.radial_segments, sm.rings])
+		check("clouds REQ-1: %s has the same tessellation as EarthSurface" % names[i],
+			sm.radial_segments == surf_sm.radial_segments and sm.rings == surf_sm.rings)
+		check("clouds REQ-1: %s is hidden with EarthRoot before the first streamed line" % names[i],
+			not n.is_visible_in_tree())
+		check("clouds: %s does not cast shadows" % names[i],
+			n.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+		check("clouds: %s uses the same fixed rotation as EarthSurface" % names[i],
+			n.transform.basis.is_equal_approx(surf.transform.basis))
+
+	# REQ-11: defaults, then clamping of coverage and density to 0..1 (also in the shader parameters).
+	check("clouds REQ-11: lower defaults coverage 0.55 and density 1.0",
+		near(lo.coverage, 0.55, 1e-9) and near(lo.density, 1.0, 1e-9), "%s %s" % [lo.coverage, lo.density])
+	check("clouds REQ-11: upper defaults coverage 0.25 and density 1.0",
+		near(up.coverage, 0.25, 1e-9) and near(up.density, 1.0, 1e-9), "%s %s" % [up.coverage, up.density])
+	for i in 2:
+		var n = nodes[i]
+		n.coverage = -0.5
+		n.density = -0.5
+		check("clouds REQ-11: %s coverage and density -0.5 clamp to 0" % names[i],
+			near(n.coverage, 0.0, 1e-9) and near(n.density, 0.0, 1e-9), "%s %s" % [n.coverage, n.density])
+		n.coverage = 1.5
+		n.density = 1.5
+		check("clouds REQ-11: %s coverage and density 1.5 clamp to 1" % names[i],
+			near(n.coverage, 1.0, 1e-9) and near(n.density, 1.0, 1e-9), "%s %s" % [n.coverage, n.density])
+		check("clouds REQ-11: %s shader parameters hold the clamped values" % names[i],
+			near(float(mats[i].get_shader_parameter("coverage")), 1.0, 1e-6)
+			and near(float(mats[i].get_shader_parameter("density")), 1.0, 1e-6))
+		n.coverage = 0.55 if i == 0 else 0.25
+		n.density = 1.0
+
+	# REQ-4: opacity caps as the material parameters and the shader's alpha expression.
+	check("clouds REQ-4: lower cap is 0.85", near(float(lo_mat.get_shader_parameter("cap")), 0.85, 1e-6))
+	check("clouds REQ-4: upper cap is 0.40", near(float(up_mat.get_shader_parameter("cap")), 0.40, 1e-6))
+	var shader_raw := FileAccess.get_file_as_string(CLOUD_SHADER)
+	var shader_code := strip_comments(shader_raw, "//")
+	check("clouds REQ-4: alpha = cap x clamped density x clamped shape, so alpha <= cap",
+		shader_code.contains("ALPHA = cap * clamp(density, 0.0, 1.0) * clamp(edge, 0.0, 1.0)"))
+	check("clouds REQ-4: overlap bound 1 - (1 - 0.85)(1 - 0.40) = 0.91",
+		near(1.0 - (1.0 - 0.85) * (1.0 - 0.40), 0.91, 1e-9))
+
+	# REQ-5: drift rates, drift over +3600 s, and angle = rate x (t - J2000).
+	check("clouds REQ-5: J2000 is 2000-01-01T12:00:00Z",
+		near(Time.get_unix_time_from_datetime_string("2000-01-01T12:00:00Z"), CLOUD_J2000_UNIX, 0.0))
+	check("clouds REQ-5: lower rate is -9.0e-5 deg/s", near(lo.drift_deg_per_s, CLOUD_LOWER_RATE, 1e-12),
+		str(lo.drift_deg_per_s))
+	check("clouds REQ-5: upper rate is +2.6938e-4 deg/s (eastward)", near(up.drift_deg_per_s, CLOUD_UPPER_RATE, 1e-12),
+		str(up.drift_deg_per_s))
+	var rates := [CLOUD_LOWER_RATE, CLOUD_UPPER_RATE]
+	var expect_step := [-0.324, 0.9698]
+	var t_a := "2026-11-10T00:00:00Z"
+	var t_b := "2026-11-10T01:00:00Z"
+	for i in 2:
+		var n = nodes[i]
+		n.apply_utc(t_a)
+		var a1: float = n.drift_deg
+		n.apply_utc(t_b)
+		var a2: float = n.drift_deg
+		var step := wrap_deg(a2 - a1)
+		check("clouds REQ-5: %s drift over +3600 s is %+.3f +/- 0.001 deg" % [names[i], expect_step[i]],
+			absf(step - expect_step[i]) <= 0.001, str(step))
+		var t := Time.get_unix_time_from_datetime_string(t_b)
+		var expect := fposmod(rates[i] * (t - CLOUD_J2000_UNIX), 360.0)
+		check("clouds REQ-5: %s angle equals rate x (t - J2000) mod 360" % names[i],
+			absf(wrap_deg(a2 - expect)) <= 1e-6, "%f vs %f" % [a2, expect])
+		check("clouds REQ-5: %s shader drift_rad equals the drift angle in radians" % names[i],
+			absf(float(mats[i].get_shader_parameter("drift_rad")) - deg_to_rad(a2)) <= 1e-6)
+
+	# Independence: each layer has its own clock state, settings and material.
+	check("clouds: the two layers use separate ShaderMaterial instances", lo_mat != null and up_mat != null and lo_mat != up_mat)
+	lo.apply_utc(t_a)
+	var up_before: float = up.drift_deg
+	lo.apply_utc(t_b)
+	check("clouds: applying a time to CloudLower leaves CloudUpper's drift unchanged", up.drift_deg == up_before)
+	up.apply_utc(t_a)
+	var lo_before: float = lo.drift_deg
+	up.apply_utc(t_b)
+	check("clouds: applying a time to CloudUpper leaves CloudLower's drift unchanged", lo.drift_deg == lo_before)
+	lo.coverage = 0.9
+	check("clouds: changing CloudLower coverage leaves CloudUpper coverage unchanged", near(up.coverage, 0.25, 1e-9))
+	lo.coverage = 0.55
+	check("clouds: the two layers drift in opposite directions", signf(lo.drift_deg_per_s) != signf(up.drift_deg_per_s))
+
+	# REQ-6 (time axis, precision part): the time reaches the shader as an integer cell and a fraction,
+	# so one second is resolved after conversion to 32-bit float.
+	for i in 2:
+		var n = nodes[i]
+		n.apply_utc("2026-11-10T00:00:00Z")
+		var c1: float = n.time_cell
+		var f1: float = n.time_frac
+		n.apply_utc("2026-11-10T00:00:01Z")
+		var c2: float = n.time_cell
+		var f2: float = n.time_frac
+		var period: float = n.shape_period_s
+		check("clouds REQ-6: %s time cell is an integer and the fraction is in [0, 1)" % names[i],
+			c1 == floorf(c1) and f1 >= 0.0 and f1 < 1.0)
+		check("clouds REQ-6: %s moves exactly 1 s along the time axis (double precision)" % names[i],
+			absf(((c2 - c1) + (f2 - f1)) * period - 1.0) <= 1e-6)
+		if c1 == c2:
+			var p := PackedFloat32Array([f1, f2])
+			check("clouds REQ-6: %s 1 s step survives float32 conversion (within 0.01 s)" % names[i],
+				absf((p[1] - p[0]) * period - 1.0) <= 0.01, str((p[1] - p[0]) * period))
+	lo.apply_utc(t_a)
+	up.apply_utc(t_a)
+
+	# REQ-8 and REQ-14: opacity from direction, time and settings only; no UV, no texture, no Sun vector.
+	check("clouds REQ-8: cloud.gdshader does not read UV or UV2", not regex_hit(shader_code, "\\bUV2?\\b"))
+	check("clouds REQ-8: cloud.gdshader declares no sampler (no texture)", not shader_code.contains("sampler"))
+	var tex_uniforms := []
+	for i in 2:
+		for u in mats[i].shader.get_shader_uniform_list():
+			if int(u["type"]) == TYPE_OBJECT:
+				tex_uniforms.append(names[i] + ":" + str(u["name"]))
+	check("clouds REQ-8: cloud shader uniforms include no texture or object type", tex_uniforms.is_empty(), str(tex_uniforms))
+	var cl_code := strip_comments(FileAccess.get_file_as_string(CLOUD_SCRIPT), "#")
+	check("clouds REQ-14: cloud shader is lit (no unshaded mode, no custom light function)",
+		not shader_code.contains("unshaded") and not regex_hit(shader_code, "void light\\("))
+	check("clouds REQ-14: cloud script and shader hold no Sun vector or Sun node",
+		not regex_hit(cl_code.to_lower(), "sun") and not regex_hit(shader_code.to_lower(), "sun"))
+
+	# REQ-7 and REQ-16 (static part): the clock is the streamed UTC only; no per-frame work and no Image or texture.
+	var time_calls := []
+	var rx := RegEx.new()
+	rx.compile("Time\\.[A-Za-z_]+")
+	for m in rx.search_all(cl_code):
+		time_calls.append(m.get_string())
+	check("clouds REQ-7: cloud_layer.gd uses only Time.get_unix_time_from_datetime_string",
+		not time_calls.is_empty() and time_calls.all(func(s): return s == "Time.get_unix_time_from_datetime_string"),
+		str(time_calls))
+	var ec_src := FileAccess.get_file_as_string("res://scripts/earth_controller.gd")
+	var a_at := ec_src.find("func apply_line")
+	var b_at := ec_src.find("func _load_month")
+	var apply_body := ec_src.substr(a_at, b_at - a_at)
+	check("clouds REQ-7: EarthController passes the line's utc to the layers only inside apply_line",
+		ec_src.count("apply_utc") == 1 and apply_body.contains("apply_utc(data[\"utc\"])"))
+	check("clouds REQ-16: cloud_layer.gd has no _process, creates no Image or texture, loads nothing",
+		not cl_code.contains("_process") and not regex_hit(cl_code, "\\bImage|\\bload\\(|preload\\(|create_from"))
+
+	free_main(main)
+
+	# REQ-19: documentation.
+	var arch := FileAccess.get_file_as_string("res://docs/ARCHITECTURE.md")
+	var csec_at := arch.find(CLOUD_ARCH_SECTION)
+	var csec := arch.substr(csec_at) if csec_at >= 0 else ""
+	check("clouds REQ-19: ARCHITECTURE.md has the Earth clouds section", csec_at >= 0)
+	var must := ["CloudLower", "CloudUpper", "cloud.gdshader", "cloud_layer.gd", "apply_utc", "utc", "coverage",
+		"density", "Known approximations"]
+	var miss := []
+	for s in must:
+		if not csec.contains(s):
+			miss.append(s)
+	check("clouds REQ-19: section names the nodes, shader, script, clock input, settings and approximations",
+		miss.is_empty(), str(miss))
+	var approx := {
+		"no link to real weather or geography": ["weather", "geography"],
+		"solid-body drift at every latitude": ["solid-body", "every latitude"],
+		"thin shells with no volume": ["thin", "no volume"],
+		"no cloud shadows": ["no cloud shadows"],
+		"standard lit shading, no scattering": ["lit shading", "no scattering"],
+		"drift too slow to see at live speed": ["too slow"],
+		"altitudes fixed at 2 km and 10 km": ["2 km", "10 km"],
+	}
+	for item in approx:
+		var ok := true
+		for s in approx[item]:
+			ok = ok and csec.contains(s)
+		check("clouds REQ-19: known approximation listed: %s" % item, ok)
+	var perf := FileAccess.get_file_as_string("res://docs/PERFORMANCE.md")
+	check("clouds REQ-19: PERFORMANCE.md links to the Earth clouds approximations in ARCHITECTURE.md",
+		perf.contains("Earth clouds") and perf.contains("docs/ARCHITECTURE.md"))
+	check("clouds REQ-17: PERFORMANCE.md records the earth_close and orbit_default results as pending user run",
+		perf.contains("median difference (budget 1.0 ms) | pending user run")
+		and perf.contains("median difference (budget 0.2 ms) | pending user run"))
+
+	# REQ-17 setup (perf script): earth_close position and clouds visible and hidden at each position.
+	var pc: Dictionary = load("res://tests/perf.gd").get_script_constant_map()
+	var pos := {}
+	for p in pc["POSITIONS"]:
+		pos[p[0]] = float(p[1])
+	check("clouds REQ-17: perf.gd earth_close is 3 x 6371 km = 19113 km from Earth's centre",
+		pos.has("earth_close") and near(pos["earth_close"], 3.0 * 6371.0, 0.5), str(pos.get("earth_close")))
+	check("clouds REQ-17: perf.gd Moon positions unchanged (orbit_far 20000, orbit_default 6000, surface 1748.232)",
+		near(pos.get("orbit_far", -1.0), 20000.0, 1e-6) and near(pos.get("orbit_default", -1.0), 6000.0, 1e-6)
+		and near(pos.get("surface", -1.0), 1748.232, 1e-6))
+	var perf_src := FileAccess.get_file_as_string("res://tests/perf.gd")
+	check("clouds REQ-17: earth_close pivots on EarthRoot and looks at it (orbit_basis identity)",
+		perf_src.contains('rig.pivot = main.get_node("EarthRoot").global_position if p[0] == "earth_close"')
+		and perf_src.contains("rig.orbit_basis = Basis.IDENTITY"))
+	check("clouds REQ-17: perf.gd measures every position with the clouds visible and hidden",
+		perf_src.contains("for clouds in [true, false]") and perf_src.contains('"EarthRoot/" + layer'))
+
+
+## Headless opacity sampling (REQ-20 table). Sample counts: caps 200 directions per layer; coverage 1000 per layer
+## (the same directions serve all four settings); density 100 per layer; seam and pole one pair per layer.
+## Sampling uses the GDScript copy in tests/cloud_noise_copy.gd and the live nodes' drift/time state and cap.
+func cloud_mesh_dir(ef: Vector3) -> Vector3:
+	# Inverse of the shader's mesh-to-Earth-fixed map (ef = (-m.z, -m.x, m.y)).
+	return Vector3(-ef.y, ef.z, -ef.x)
+
+
+func cloud_u(s: Dictionary, ef: Vector3) -> float:
+	return CloudCopy.u_mesh(cloud_mesh_dir(ef), s["drift"], s["cell"], s["frac"], s["freq"], CLOUD_SPREAD)
+
+
+func cloud_alpha(s: Dictionary, ef: Vector3, cov: float, dens: float) -> float:
+	return CloudCopy.alpha_from_u(cloud_u(s, ef), cov, dens, s["cap"], CLOUD_SOFTNESS)
+
+
+func lonlat_dir(lat_deg: float, lon_deg: float) -> Vector3:
+	var la := deg_to_rad(lat_deg)
+	var lo := deg_to_rad(lon_deg)
+	return Vector3(cos(la) * cos(lo), cos(la) * sin(lo), sin(la))
+
+
+func unit_dirs(n: int, seed_value: int) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var out := []
+	for i in n:
+		var z := rng.randf_range(-1.0, 1.0)
+		var phi := rng.randf_range(0.0, TAU)
+		var r := sqrt(maxf(0.0, 1.0 - z * z))
+		out.append(Vector3(r * cos(phi), r * sin(phi), z))
+	return out
+
+
+func test_cloud_sampling() -> void:
+	var main := spawn_main()
+	var er := main.get_node("EarthRoot") as Node3D
+	var nodes := [er.get_node("CloudLower"), er.get_node("CloudUpper")]
+	var names := ["CloudLower", "CloudUpper"]
+
+	# Copy fidelity: every copied formula line is in the shader, and the shader defaults match the copy's constants.
+	var src := FileAccess.get_file_as_string(CLOUD_SHADER)
+	var missing := []
+	for line in CloudCopy.SHADER_LINES:
+		if not src.contains(line):
+			missing.append(line)
+	check("clouds sampling: every copied shader line is in shaders/cloud.gdshader", missing.is_empty(), str(missing))
+	check("clouds sampling: spread and softness are the shader defaults the copy uses",
+		src.contains("uniform float spread = 0.13;") and src.contains("uniform float softness = 0.25;"))
+
+	# Per-layer state from the live nodes after one streamed line (same code path as the app).
+	var st := []
+	for i in 2:
+		var n = nodes[i]
+		n.apply_utc(CLOUD_T0)
+		var m := n.material_override as ShaderMaterial
+		st.append({"drift": deg_to_rad(n.drift_deg), "cell": n.time_cell, "frac": n.time_frac,
+			"freq": float(m.get_shader_parameter("frequency")), "cap": float(m.get_shader_parameter("cap")),
+			"cov": float(n.coverage), "dens": float(n.density)})
+
+	# REQ-4: 200 directions per layer at coverage 1, density 1; max per layer and of the overlap.
+	var max_alpha := [0.0, 0.0]
+	var max_overlap := 0.0
+	for d in unit_dirs(200, 2002):
+		var keep := 1.0
+		for i in 2:
+			var a := cloud_alpha(st[i], d, 1.0, 1.0)
+			max_alpha[i] = maxf(max_alpha[i], a)
+			keep *= 1.0 - a
+		max_overlap = maxf(max_overlap, 1.0 - keep)
+	check("clouds REQ-4: CloudLower max alpha at density 1 is at most 0.85 (%.4f)" % max_alpha[0], max_alpha[0] <= 0.85)
+	check("clouds REQ-4: CloudUpper max alpha at density 1 is at most 0.40 (%.4f)" % max_alpha[1], max_alpha[1] <= 0.40)
+	check("clouds REQ-4: overlap of both layers is at most 0.91 (%.4f)" % max_overlap, max_overlap <= 0.91)
+
+	# REQ-12 (coverage 0, 0.25, 0.5, 1): 1000 directions per layer, u computed once per direction for all settings.
+	var d1000 := unit_dirs(1000, 1001)
+	var u_all := []
+	for i in 2:
+		var us := PackedFloat64Array()
+		for d in d1000:
+			us.append(cloud_u(st[i], d))
+		u_all.append(us)
+	for i in 2:
+		var nm: String = names[i]
+		var us: PackedFloat64Array = u_all[i]
+		for c in [0.0, 0.25, 0.5, 1.0]:
+			var count := 0
+			var peak := 0.0
+			for u in us:
+				var a := CloudCopy.alpha_from_u(u, c, 1.0, st[i]["cap"], CLOUD_SOFTNESS)
+				peak = maxf(peak, a)
+				if a > 0.05:
+					count += 1
+			var frac := float(count) / us.size()
+			if c == 0.0:
+				check("clouds REQ-12: %s coverage 0 gives no alpha above 0.0 (peak %.6f)" % [nm, peak], peak == 0.0)
+			elif c == 1.0:
+				check("clouds REQ-12: %s coverage 1 gives at least 0.95 above 0.05 (%.4f)" % [nm, frac], frac >= 0.95)
+			else:
+				check("clouds REQ-12: %s coverage %.2f fraction within 0.05 of the setting (%.4f)" % [nm, c, frac],
+					absf(frac - c) <= 0.05)
+
+	# REQ-13: density 0, 0.5 and 1 on the first 100 directions, layer default coverage.
+	for i in 2:
+		var nm: String = names[i]
+		var us: PackedFloat64Array = u_all[i]
+		var cov: float = st[i]["cov"]
+		var worst := 0.0
+		var zero_ok := true
+		for k in 100:
+			var a1 := CloudCopy.alpha_from_u(us[k], cov, 1.0, st[i]["cap"], CLOUD_SOFTNESS)
+			var ah := CloudCopy.alpha_from_u(us[k], cov, 0.5, st[i]["cap"], CLOUD_SOFTNESS)
+			var a0 := CloudCopy.alpha_from_u(us[k], cov, 0.0, st[i]["cap"], CLOUD_SOFTNESS)
+			worst = maxf(worst, absf(ah - 0.5 * a1))
+			if a0 != 0.0:
+				zero_ok = false
+		check("clouds REQ-13: %s density 0 gives zero and density 0.5 is half of density 1 within 0.005 (worst %.6f)"
+			% [nm, worst], zero_ok and worst <= 0.005)
+
+	# REQ-9 (headless pair): latitude 0, longitudes 179.999 and -179.999, per layer, default coverage and density 1.
+	for i in 2:
+		var nm: String = names[i]
+		var cov: float = st[i]["cov"]
+		var a := cloud_alpha(st[i], lonlat_dir(0.0, 179.999), cov, 1.0)
+		var b := cloud_alpha(st[i], lonlat_dir(0.0, -179.999), cov, 1.0)
+		check("clouds REQ-9: %s seam pair at latitude 0 differs by at most 0.01 (%.6f)" % [nm, absf(a - b)],
+			absf(a - b) <= 0.01)
+
+	# REQ-10 longitude part (headless pair): latitude 89.9, longitudes 0 and 0.9, per layer.
+	for i in 2:
+		var nm: String = names[i]
+		var cov: float = st[i]["cov"]
+		var a := cloud_alpha(st[i], lonlat_dir(89.9, 0.0), cov, 1.0)
+		var b := cloud_alpha(st[i], lonlat_dir(89.9, 0.9), cov, 1.0)
+		check("clouds REQ-10: %s pole pair at latitude 89.9 (lon 0 and 0.9) differs by at most 0.01 (%.6f)"
+			% [nm, absf(a - b)], absf(a - b) <= 0.01)
+
+	free_main(main)

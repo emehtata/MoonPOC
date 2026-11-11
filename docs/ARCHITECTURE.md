@@ -153,3 +153,37 @@ The monthly image is chosen from the UTC month of each applied line (hard switch
 runtime from `assets/earth/bmng/` (downloaded by `make earth-texture`, not committed), decoded with
 `Image.load_from_file`, with mipmaps generated at load. If a file is missing, one ERROR line names it and the
 command, and Earth renders with a plain material.
+
+### Earth clouds (Earth Milestone 2)
+
+Spec: `docs/specs/earth-milestone-2-clouds.md`.
+
+`EarthRoot` has two more children, `CloudLower` (radius 6373 km, 2 km up) and `CloudUpper` (radius 6381 km, 10 km up).
+Each is a 128 x 64 sphere mesh (same fixed rotation as `EarthSurface`) with a `ShaderMaterial` of
+`shaders/cloud.gdshader` as `material_override`, no shadow casting, and the script `scripts/cloud_layer.gd`.
+Both shells are lit by the scene `Sun`; no cloud script or shader holds a Sun vector.
+
+- Shader: opacity is 4-octave 3D value-noise fBm sampled at the Earth-fixed direction (mesh direction mapped to the
+  Earth-fixed frame, then rotated about +z by the drift angle). `UV` is not read and no texture is used, so there is no seam
+  and no polar pinching. The noise value is turned into an approximately uniform rank by a logistic function
+  (`spread`), a soft threshold at `1 - coverage` (`softness` wide) gives the shape, and alpha = `cap` x `density` x shape
+  (`cap` 0.85 lower, 0.40 upper). Coverage 0 gives alpha 0.
+- Clock: `EarthController` passes the `utc` of each applied line to `CloudLower.apply_utc` and `CloudUpper.apply_utc`. In
+  doubles, the script computes t = utc - J2000, the drift angle `drift_deg_per_s` x t reduced to 0..360 deg, and the time
+  axis w = t / `shape_period_s` split into an integer cell and a fraction. Only these reduced numbers reach the GPU, so
+  float32 keeps sub-second resolution. The shader cross-fades (cos/sin weights) two independent noise fields, cell and
+  cell + 1, so the pattern changes shape continuously. No wall-clock time is used; after helper failure the last values stay.
+- Settings (exported on `cloud_layer.gd`, clamped to 0..1): `coverage` and `density`; lower 0.55 / 1.0, upper 0.25 / 1.0.
+  Drift rates: lower -9.0e-5 deg/s (10 m/s west), upper +2.6938e-4 deg/s (30 m/s east). Shape periods: lower 6 h, upper 2 h.
+  Noise frequency (cells per radius): lower 4, upper 12 (material parameters).
+
+Known approximations:
+
+- Clouds are noise with no link to real weather or geography.
+- The drift is solid-body rotation, the same at every latitude.
+- The shells are thin and have no volume.
+- There are no cloud shadows.
+- The lighting is the standard lit shading, with no scattering.
+- At live speed the drift is too slow to see (about 0.32 deg/h lower, 0.97 deg/h upper).
+- The altitudes are fixed at 2 km and 10 km.
+- The rank mapping of the noise is a logistic fit, so the cloud fraction matches `coverage` to about 0.03, not exactly.

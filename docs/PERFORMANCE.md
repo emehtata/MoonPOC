@@ -134,3 +134,19 @@ All numbers below come from `make perf HEADLESS=1` (2026-11-11), from code const
 - **Total size and memory.** 405 600 vertices, 786 432 triangles; mesh arrays 22 416 384 bytes (21.38 MiB, formula in the headless table), stored surface buffers 16 075 392 bytes (15.33 MiB).
 - **Build time if the grid were refined.** Extrapolation from the measurement, assuming time grows linearly with vertex count: 965 ms / 405 600 = 2.379 µs per vertex (median). Splitting every chunk once (depth 1 everywhere, 384 chunks x 4225 = 1 622 400 vertices): 2.379 µs x 1 622 400 = 3 860 ms. A uniform grid at depth 3, the deepest depth LDEM_64 supports (6144 chunks x 4225 = 25 958 400 vertices): 2.379 µs x 25 958 400 = 61 760 ms. Mesh arrays grow by the same factors: 4 x 21.38 = 85.5 MiB and 64 x 21.38 = 1368 MiB. These are extrapolations, not measurements.
 - **Effect at the `surface` position.** At 1748.232 the camera is 10.832 km above the reference sphere, while the on-ground vertex spacing is 7.538 to 10.661 km: the spacing is about as large as the camera height, so the nearby ground is a few large flat triangles. Frame time and primitives at `surface`: pending user run.
+
+## Earth clouds (Earth Milestone 2, REQ-16 and REQ-17)
+
+Command: `make perf` windowed. It measures `orbit_far`, `orbit_default`, `surface` and `earth_close` (3 x R_E from Earth's
+centre, pivot on Earth), each with the clouds visible and then hidden, 120 warm-up frames and a 10 s sample. Needs the helper
+streaming so Earth is shown. Budgets: median frame time with clouds at most 1.0 ms higher at `earth_close` and 0.2 ms higher at
+`orbit_default`; draw calls at most 2 higher.
+
+| Item | Result |
+|---|---|
+| Machine, GPU, date | pending user run |
+| `earth_close` median difference (budget 1.0 ms) | pending user run |
+| `orbit_default` median difference (budget 0.2 ms) | pending user run |
+| Draw call difference (budget 2) | pending user run |
+
+REQ-17 is open until the user runs this. Known approximations of the clouds are listed in `docs/ARCHITECTURE.md`, "Earth clouds".

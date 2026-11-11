@@ -77,7 +77,7 @@ Show Earth in the lunar sky as a real 3D sphere, at its true size and its true p
 - **REQ-8**: The rendered Earth sphere has radius 6371.0 ± 0.5 units (mesh radius times any scale of `EarthRoot` and `EarthSurface`), with at least 64 radial segments and 32 rings.
 - **REQ-9**: For every applied streamed line, `EarthRoot`'s global position equals `earth_pos_godot` within 1 unit, and its global basis equals `earth_basis_godot` within 1e-6 per element. Before the first line arrives, `EarthRoot` is hidden. On helper failure (Sun spec REQ-25) Earth keeps its last applied position and orientation, or stays hidden if no line arrived. No extra error lines beyond the one REQ-25 already prints.
 - **REQ-10**: Earth's position and orientation change only through REQ-9. Camera movement (orbit, zoom, pan) does not change `EarthRoot`'s global transform.
-- **REQ-11**: The camera far clip plane is at least 440 000 units (max Earth distance about 406 700 + R_E + max camera distance 20 000, rounded up). The near plane stays at most 0.01 (Moon M1 REQ-20). Earth renders with the normal depth test, so the Moon hides Earth when the Moon is between the camera and Earth.
+- **REQ-11**: The camera far clip plane is at least 440 000 units (max Earth distance about 406 700 + R_E + max camera distance 20 000, rounded up). The near plane stays at most 0.05 (Moon M1 REQ-20). Earth renders with the normal depth test, so the Moon hides Earth when the Moon is between the camera and Earth.
 
 ### Texture
 
@@ -145,7 +145,7 @@ Show Earth in the lunar sky as a real 3D sphere, at its true size and its true p
 | REQ-8 | `EarthSurface` | Read mesh radius, segments, rings and global scale | 6371.0 ± 0.5; ≥ 64 segments, ≥ 32 rings |
 | REQ-9 | Running project; fake helper via `MOON_SUN_HELPER` printing one valid line then exiting | Read `EarthRoot` before and after the line, and after the helper stops | Hidden before; transform equals the line within tolerance after; unchanged after the helper stops |
 | REQ-10 | Running project | Orbit, zoom 50 notches, pan 100 px | `EarthRoot` global transform unchanged (until the next streamed line) |
-| REQ-11 | Camera | Read near and far | `near ≤ 0.01`, `far ≥ 440000` |
+| REQ-11 | Camera | Read near and far | `near ≤ 0.05`, `far ≥ 440000` |
 | REQ-12 | 12 texture files; running project | Count files; read format and size; read the loaded surface texture | 12 JPG files, one per month, the lowest NASA resolution; the loaded texture has mipmaps; the material holds only Blue Marble albedo textures; the spec states the override |
 | REQ-13 | `EarthRoot` at identity | Find UV at Earth-fixed +x, +y (90° E), +z, in every month | +x shows 0° E (u = 0.5 for a −180..180 texture), +y shows 90° E, +z shows the north pole (v = 0) |
 | REQ-14 | No texture files | `make earth-texture` twice; then with one corrupted file | First downloads 12 and verifies; second no download, exit 0; corrupted file makes it replace the file or fail with no partial file left |
@@ -167,7 +167,7 @@ Show Earth in the lunar sky as a real 3D sphere, at its true size and its true p
 - **Streamed line missing the new Earth fields or with a non-orthonormal basis** (tolerance 1e-6): treated as an invalid line under Sun spec REQ-25 (one ERROR line, keep last state).
 - **Earth distance range**: about 356 400 to 406 700 km over a month; all limits above cover it. From the REQ-19 camera position (1748.232 units toward Earth) this gives an apparent diameter of 1.79° to 2.06° (2.0586° at 356 400 km).
 - **Camera on the far side**: Earth is below the horizon and hidden by the Moon (REQ-22).
-- **Depth precision** (near 0.01, far ≥ 440 000): Earth must show no z-fighting or flicker in the REQ-19 and REQ-22 frames.
+- **Depth precision** (near 0.05, far ≥ 440 000): Earth must show no z-fighting or flicker in the REQ-19 and REQ-22 frames.
 
 ## Assumptions
 
@@ -186,6 +186,7 @@ None.
 
 ## Revision history
 
+- 2026-11-11: Revision 10, user decision. REQ-11 near clip limit 0.01 → 0.05 (fixes a Godot light-culling error from the depth range ratio); acceptance row and the depth-precision edge case updated to match. Far ≥ 440 000 unchanged. Nothing else changed.
 - 2026-11-11: Revision 9, tester SPEC_ISSUEs with user decisions. REQ-19 apparent-diameter range raised to 1.79°–2.06° (acceptance row and Earth-distance edge case updated; formula unchanged). REQ-12: mipmaps generated at runtime when each month's image loads, import-settings wording removed (acceptance row updated). Duplicate REQ-17: the lighting requirement and its acceptance row renumbered to REQ-25. Nothing else changed.
 - 2026-11-11: Revision 8, verified Earth subsolar Horizons query recorded in REQ-6 (COMMAND='399', CENTER='500@301', Q15, ITRF93, geodetic; lon 0.459544°, lat 23.578619°, tolerance 0.5°) with a one-line method in the Milestone 1 model; "pending verification" and the frame-not-confirmed note removed; acceptance row updated; open question closed; Status Ready.
 - 2026-11-11: Revision 7, user decision. Mean radius 6371 km used for the apparent-size check; equatorial-radius reasoning removed; Horizons 6582.073″ kept as reference with the ≈ 0.11 % known difference stated as not a failure. Earth subsolar row marked pending verification with no reference value; reopened as Open question 1; Status back to Draft.

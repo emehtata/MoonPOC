@@ -164,8 +164,8 @@ The M1 grab conventions (REQ-16 directions, REQ-19 direction) and the clamps sta
 | REQ-9 | Distance 1748.232 | One notch out | 1748.232 / 0.974679 = 1793.65 (±0.01) |
 | REQ-9 | Distance 6000 | 23 notches out, then 1 more | After 23: 6000 / 0.95^23 = 19521.2 (±0.1). After 24: 20000 (±0.01) |
 | REQ-9 | Pivot (500, 0, 0), wheel in 300 notches | Read camera | Distance from the Moon's centre ≥ 1748.232 |
-| REQ-10 | Distance 6000 | Left drag 100 px right | Yaw −20° (±0.5), as in M1 |
-| REQ-10 | Distance 1748.232 | Left drag 1000 px right | Yaw changes by 0.508° (±0.005) |
+| REQ-10 | Distance 6000 | Left drag 100 px right | Camera offset rotates 20° (±0.5) about the camera's screen up axis (M1 REQ-16 trackball) |
+| REQ-10 | Distance 1748.232 | Left drag 1000 px right | Camera offset rotates 0.508° (±0.005) about the camera's screen up axis |
 | REQ-10 | Distance 1748.232, pivot at centre | Middle drag 1000 px right | Pivot moves 0.444 km (±0.005) camera-left |
 | REQ-11 | Startup | Read tilt and heading; compare the camera transform with M1 REQ-21 | 0, 0; same transform within 1e-4 |
 | REQ-11 | Tilt 0 | Right drag 1000 px down; right drag 100 px right | Tilt 85 (clamped); heading −20; camera position unchanged within 1e-4 |
@@ -207,3 +207,4 @@ None.
 - 2026-11-11: Initial spec for Milestone 3 (visual quality). Covers all four areas per the user's decision: Lommel-Seeliger shader, PSSM shadows with a camera-tracking max distance, altitude-based camera control with look mode, and an offline Rust ENU normal map from the 4096 × 2048 LOLA level.
 - 2026-11-11: Revision 2, from implementer report. REQ-9 acceptance row "116 notches in": bound corrected from "1748.232 < D ≤ 1748.30" to D = 1737.4 + 4262.6 · 0.95^116 = 1748.507 (±0.002), which is what REQ-9's formula gives. Nothing else changed.
 - 2026-11-11: Revision 3, user decisions. REQ-9 zoom rule replaced: distance · f^(±1), with f = 0.95 above 500 km altitude and sqrt(0.95) = 0.974679 at or below it. The altitude-based step (117 notches) is dropped. Camera table rows C1 to C3, the Scope line and the REQ-9 acceptance rows were updated (29 notches from 6000 to the minimum, 24 to the maximum). Minimum, maximum, the orbit and pan rules (REQ-10, independent of zoom), look mode and the normal map are unchanged.
+- 2026-11-11: Revision 4, user decision (M1 REQ-16 is now a screen-space trackball). The two REQ-10 left-drag acceptance rows now measure the rotation of the camera offset about the screen up axis instead of a yaw change. REQ-10 and REQ-11 text needed no change (REQ-10 sets only rates; REQ-11 look mode already uses camera-relative axes). Rates, scaling and everything else unchanged.

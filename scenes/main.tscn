@@ -6,6 +6,8 @@
 
 [ext_resource type="Script" path="res://scripts/sun_disc.gd" id="4_disc"]
 [ext_resource type="Script" path="res://scripts/earth_controller.gd" id="5_earth"]
+[ext_resource type="Script" path="res://scripts/cloud_layer.gd" id="6_cloud"]
+[ext_resource type="Shader" path="res://shaders/cloud.gdshader" id="7_cloudshader"]
 
 [sub_resource type="Environment" id="Environment_space"]
 background_mode = 1
@@ -24,6 +26,30 @@ rings = 64
 texture_filter = 5
 roughness = 1.0
 
+[sub_resource type="SphereMesh" id="SphereMesh_cloud_lower"]
+radius = 6373.0
+height = 12746.0
+radial_segments = 128
+rings = 64
+
+[sub_resource type="SphereMesh" id="SphereMesh_cloud_upper"]
+radius = 6381.0
+height = 12762.0
+radial_segments = 128
+rings = 64
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_cloud_lower"]
+render_priority = 0
+shader = ExtResource("7_cloudshader")
+shader_parameter/cap = 0.85
+shader_parameter/frequency = 4.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_cloud_upper"]
+render_priority = 1
+shader = ExtResource("7_cloudshader")
+shader_parameter/cap = 0.4
+shader_parameter/frequency = 12.0
+
 [node name="Main" type="Node3D"]
 
 [node name="Moon" parent="." instance=ExtResource("1_moon")]
@@ -37,6 +63,23 @@ cast_shadow = 0
 mesh = SubResource("SphereMesh_earth")
 surface_material_override/0 = SubResource("StandardMaterial3D_earth")
 
+[node name="CloudLower" type="MeshInstance3D" parent="EarthRoot"]
+transform = Transform3D(0, 0, -1, -1, 0, 0, 0, 1, 0, 0, 0, 0)
+material_override = SubResource("ShaderMaterial_cloud_lower")
+cast_shadow = 0
+mesh = SubResource("SphereMesh_cloud_lower")
+script = ExtResource("6_cloud")
+
+[node name="CloudUpper" type="MeshInstance3D" parent="EarthRoot"]
+transform = Transform3D(0, 0, -1, -1, 0, 0, 0, 1, 0, 0, 0, 0)
+material_override = SubResource("ShaderMaterial_cloud_upper")
+cast_shadow = 0
+mesh = SubResource("SphereMesh_cloud_upper")
+script = ExtResource("6_cloud")
+coverage = 0.25
+drift_deg_per_s = 0.00026938
+shape_period_s = 7200.0
+
 [node name="EarthController" type="Node" parent="EarthRoot"]
 script = ExtResource("5_earth")
 
@@ -45,7 +88,7 @@ script = ExtResource("2_camera")
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 current = true
-near = 0.01
+near = 0.05
 far = 440000.0
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
