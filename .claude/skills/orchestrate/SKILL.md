@@ -42,6 +42,14 @@ Rules for reversal:
 - Do not edit files under `docs/specs/`, source code, or tests yourself. If you think one is wrong, send the reason to the stage that owns it.
 - Every subagent must end with its report. If a subagent's result has no report or no status line, do not guess the status. Resend the same task to that subagent and ask it to report in the required format. If it fails to report twice, stop and tell the user which stage did not report.
 
+## Standing rules (from the user)
+- Never use the Fable model. Each agent runs on the model set in its agent file, and no Agent call overrides it to Fable.
+- Follow the pipeline exactly. Do not skip a stage, and do not let an implementer change requirements.
+- Do exactly what the user asked. If a request could mean two different behaviours, ask the user before routing it.
+- Never assume. When unsure about a setting, a scope, a model, or what the user meant, ask the user before acting.
+- Never edit agent definitions, config or specs to work around a failure without asking the user first.
+- A passing test suite is not an on-screen check. Visual checks stay with the user.
+
 ## Final message to the user
 - Spec: path and status.
 - What changed: changed files, grouped by purpose.

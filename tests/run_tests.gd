@@ -1,13 +1,27 @@
 extends SceneTree
-## Headless tests for docs/specs/moon-globe-milestone-1.md (REQ-1..REQ-25, except REQ-8 visual and REQ-24 run-time).
+## Headless tests for docs/specs/moon-globe-milestone-1.md, sun-ephemeris-and-sun-disc.md
+## and docs/specs/moon-elevation-milestone-2.md.
 ## Run with: make test   (godot --headless --path . --script tests/run_tests.gd)
 ## Input is delivered by calling _unhandled_input on the rig and the sun (the
 ## viewport is not inside the tree during _initialize, so push_input cannot be used).
+##
+## Milestone 2 replaces the M1 SphereMesh checks. The radius, orientation and u
+## mapping checks are kept, now on the 96 chunk meshes of the cube-sphere.
+## Checks that need a display (M2 REQ-32) are not here; see the pending list.
 
 const MAIN_SCENE := "res://scenes/main.tscn"
 const TEXTURE := "res://assets/textures/lunar_albedo_4096x2048.png"
 const DATA_SOURCES := "res://docs/DATA_SOURCES.md"
+const ARCHITECTURE := "res://docs/ARCHITECTURE.md"
 const RAW_DIR := "res://data/raw/lroc_wac_gmm_100m/"
+const RAW_DEM_DIR := "res://data/raw/lola_ldem_64/"
+const HEIGHT_LEVEL := "res://assets/elevation/lola_height_m_2048x1024.f32"
+const METADATA := "res://assets/elevation/moon_data.json"
+const REF_RADIUS_KM := 1737.4
+const CHUNK_SIDE := 65
+const CHUNKS := 96
+const TOTAL_VERTICES := 96 * 65 * 65
+const TOTAL_TRIANGLES := 96 * 64 * 64 * 2
 
 var _passed := 0
 var _main: Node = null
@@ -95,14 +109,26 @@ func _process(_delta: float) -> bool:
 func run_all() -> void:
 	test_project()
 	test_scene()
-	test_moon_geometry()
+	test_moon_structure()
+	test_moon_radius()
+	test_moon_orientation()
+	test_moon_uv()
+	test_moon_seams()
 	test_moon_material_and_texture()
 	test_texture_seam()
 	test_sun()
+	test_sun_stream_parsing()
+	test_sun_bad_line_req25()
 	test_sun_ephemeris_and_disc()
 	test_audit()
 	test_camera()
+	test_m3_camera()
+	test_m3_shadows()
+	test_m3_docs()
+	test_elevation_assets()
 	test_data_sources()
+	test_docs_m2()
+	test_earth()
 	test_repo_scan()
 	print("RESULT: %d total, %d passed, %d failed" % [_passed + _failed, _passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -147,8 +173,10 @@ func test_project() -> void:
 
 func test_scene() -> void:
 	var main := spawn_main()
-	check("REQ-4: scene contains Moon (MeshInstance3D)",
-		main.get_node_or_null("Moon") is MeshInstance3D)
+	# M2 REQ-14 replaced the single MeshInstance3D with a Node3D holding 96 chunk meshes.
+	var moon_node := main.get_node_or_null("Moon")
+	check("REQ-4 (M2 REQ-14): scene contains Moon (Node3D holding chunk MeshInstance3D children)",
+		moon_node is Node3D and not (moon_node is MeshInstance3D))
 	check("REQ-4: scene contains CameraRig with a Camera3D child",
 		main.get_node_or_null("CameraRig") is Node3D
 		and main.get_node_or_null("CameraRig/Camera3D") is Camera3D)
@@ -181,56 +209,200 @@ func test_scene() -> void:
 	free_main(main)
 
 
-# ---------------------------------------------------------------- moon geometry
+# ---------------------------------------------------------------- M2 helpers
 
-func test_moon_geometry() -> void:
+func chunks_of(moon: Node) -> Array:
+	var out: Array = []
+	for c in moon.get_children():
+		if c is MeshInstance3D:
+			out.append(c)
+	return out
+
+
+## Every vertex, normal and UV of every chunk, concatenated in chunk order.
+func flat_arrays(moon: Node) -> Dictionary:
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	for c in chunks_of(moon):
+		var arr: Array = c.mesh.surface_get_arrays(0)
+		verts.append_array(arr[Mesh.ARRAY_VERTEX])
+		norms.append_array(arr[Mesh.ARRAY_NORMAL])
+		uvs.append_array(arr[Mesh.ARRAY_TEX_UV])
+	return {"verts": verts, "norms": norms, "uvs": uvs}
+
+
+func height_level() -> PackedFloat32Array:
+	return FileAccess.get_file_as_bytes(HEIGHT_LEVEL).to_float32_array()
+
+
+## Latitude (radians) of a point, from its direction: atan2 keeps precision near the poles.
+func lat_of(v: Vector3) -> float:
+	return atan2(v.y, sqrt(v.x * v.x + v.z * v.z))
+
+
+## East longitude (radians, 0..TAU) of a point, from its direction.
+func lon_of(v: Vector3) -> float:
+	var l := atan2(v.x, v.z)
+	return l + TAU if l < 0.0 else l
+
+
+## Unit direction of a latitude and longitude in degrees (east-positive), the M1 orientation.
+func dir_of(lat_deg: float, lon_deg: float) -> Vector3:
+	var p := deg_to_rad(lat_deg)
+	var l := deg_to_rad(lon_deg)
+	return Vector3(cos(p) * sin(l), sin(p), cos(p) * cos(l))
+
+
+## REQ-15 height in metres, written here independently of scripts/moon.gd:
+## bilinear between the 2048 x 1024 cell centres, wrapping in longitude and
+## clamped to the first and last row centres in latitude.
+func ref_height_m(h: PackedFloat32Array, lat: float, lon: float) -> float:
+	var w := 2048
+	var rows := 1024
+	var fx := lon / TAU * w - 0.5
+	var x0 := floori(fx)
+	var ax := fx - x0
+	var xa := posmod(x0, w)
+	var xb := posmod(x0 + 1, w)
+	var fy := clampf((PI / 2.0 - lat) / PI * rows - 0.5, 0.0, float(rows - 1))
+	var y0 := floori(fy)
+	var y1 := mini(y0 + 1, rows - 1)
+	var ay := fy - y0
+	var top := lerpf(h[y0 * w + xa], h[y0 * w + xb], ax)
+	var bottom := lerpf(h[y1 * w + xa], h[y1 * w + xb], ax)
+	return lerpf(top, bottom, ay)
+
+
+func nearest_index(verts: PackedVector3Array, dir: Vector3) -> int:
+	var best := 0
+	var best_a := INF
+	for i in verts.size():
+		var a := verts[i].angle_to(dir)
+		if a < best_a:
+			best_a = a
+			best = i
+	return best
+
+
+# ---------------------------------------------------------------- M2 structure (REQ-14, REQ-15, REQ-16)
+
+func test_moon_structure() -> void:
 	var main := spawn_main()
-	var moon := main.get_node("Moon") as MeshInstance3D
-	var sphere := moon.mesh as SphereMesh
-	check("REQ-5: Moon mesh is a SphereMesh", sphere != null)
-	if sphere == null:
-		free_main(main)
-		return
-	check("REQ-5: sphere radius is 1737.4", near(sphere.radius, 1737.4, 0.0001), str(sphere.radius))
-	check("REQ-5: sphere segments meet the assumed minimum (>=256 radial, >=128 rings)",
-		sphere.radial_segments >= 256 and sphere.rings >= 128,
-		"radial %d rings %d" % [sphere.radial_segments, sphere.rings])
+	var moon := main.get_node("Moon") as Node3D
+	var chunks := chunks_of(moon)
+	check("REQ-14: Moon holds 96 chunk MeshInstance3D nodes (6 faces x 4 x 4)",
+		chunks.size() == CHUNKS, str(chunks.size()))
+	var names := {}
+	var bad_size := 0
+	var total := 0
+	var all_array_meshes := true
+	for c in chunks:
+		names[c.name] = true
+		if not (c.mesh is ArrayMesh):
+			all_array_meshes = false
+		var arr: Array = c.mesh.surface_get_arrays(0)
+		var n: int = arr[Mesh.ARRAY_VERTEX].size()
+		total += n
+		if n != CHUNK_SIDE * CHUNK_SIDE:
+			bad_size += 1
+	check("REQ-14: chunk names are unique", names.size() == CHUNKS, str(names.size()))
+	check("REQ-14: every chunk has 65 x 65 vertices", bad_size == 0, "%d chunks differ" % bad_size)
+	check("REQ-14: total vertices 6 x 16 x 65 x 65 = 405600", total == TOTAL_VERTICES, str(total))
+	check("REQ-14: chunks are ArrayMesh (the SphereMesh is gone)", all_array_meshes)
+	check("REQ-15: Moon node is at identity transform (scale 1.0, no vertical exaggeration)",
+		moon.transform.is_equal_approx(Transform3D.IDENTITY), str(moon.transform))
+	check("REQ-15: reference radius from moon_data.json is 1737.4 units",
+		near(moon.reference_radius, REF_RADIUS_KM, 0.0001), str(moon.reference_radius))
+	var hidden := 0
+	for c in chunks_of(moon):
+		if not c.is_visible_in_tree() or c.mesh == null or c.mesh.get_surface_count() == 0 \
+				or c.mesh.surface_get_material(0) == null or c.get_parent() != moon:
+			hidden += 1
+	check("REQ-14: every chunk is a visible Moon child with a mesh and a material",
+		chunks_of(moon).size() == CHUNKS and hidden == 0, "%d chunks fail" % hidden)
+	check("REQ-16: terrain built once at startup (terrain_built true)", moon.terrain_built)
+	check("REQ-16: build time recorded (ms >= 0)", moon.terrain_build_ms >= 0, str(moon.terrain_build_ms))
+	var src := FileAccess.get_file_as_string("res://scripts/moon.gd")
+	check("REQ-16: scripts/moon.gd has no _process or _physics_process (no per-frame terrain)",
+		not src.contains("func _process") and not src.contains("func _physics_process"))
+	free_main(main)
 
-	var verts: PackedVector3Array = moon.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var max_dev := 0.0
+
+# ---------------------------------------------------------------- M2 radius (REQ-25, REQ-30)
+
+func test_moon_radius() -> void:
+	var main := spawn_main()
+	var moon := main.get_node("Moon") as Node3D
+	var h := height_level()
+	var arr := flat_arrays(moon)
+	var verts: PackedVector3Array = arr["verts"]
+	var worst := 0.0
+	var worst_at := -1
+	var sum := 0.0
 	var min_r := INF
 	var max_r := -INF
-	for v in verts:
+	var not_finite := 0
+	for i in verts.size():
+		var v := verts[i]
+		if not v.is_finite():
+			not_finite += 1
+			continue
 		var r := v.length()
-		max_dev = maxf(max_dev, absf(r - 1737.4))
+		var want := REF_RADIUS_KM + ref_height_m(h, lat_of(v), lon_of(v)) / 1000.0
+		var dev := absf(r - want)
+		if dev > worst:
+			worst = dev
+			worst_at = i
+		sum += r
 		min_r = minf(min_r, r)
 		max_r = maxf(max_r, r)
-	check("REQ-5: all %d sampled vertices lie within 1737.4 +/- 0.1 of the center" % verts.size(),
-		max_dev <= 0.1, "min %.4f max %.4f" % [min_r, max_r])
-	check("REQ-5: no displacement (min and max radius equal within 0.1)",
-		max_r - min_r <= 0.2, "min %.4f max %.4f" % [min_r, max_r])
+	var mean := sum / verts.size()
+	check("REQ-25: every vertex radius equals 1737.4 + h/1000 within 0.001 (max %.6f at vertex %d)" % [worst, worst_at],
+		worst <= 0.001 and not_finite == 0, "max %.6f, not finite %d" % [worst, not_finite])
+	check("REQ-30: mean vertex radius is 1737.4 +/- 2 (mean %.3f)" % mean,
+		absf(mean - REF_RADIUS_KM) <= 2.0, str(mean))
+	check("REQ-30: every vertex radius lies between 1737.4 - 9.2 and 1737.4 + 10.8 (min %.3f, max %.3f)" % [min_r, max_r],
+		min_r >= REF_RADIUS_KM - 9.2 and max_r <= REF_RADIUS_KM + 10.8,
+		"min %.3f max %.3f" % [min_r, max_r])
+	free_main(main)
 
-	# Moon at identity transform, so local orientation equals world orientation.
-	check("REQ-7: Moon node is at identity transform",
-		moon.transform.is_equal_approx(Transform3D.IDENTITY))
 
-	var uvs: PackedVector2Array = moon.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+# ---------------------------------------------------------------- M2 orientation (REQ-17, M1 REQ-7, M1 REQ-6)
+
+func test_moon_orientation() -> void:
+	var main := spawn_main()
+	var moon := main.get_node("Moon") as Node3D
+	var arr := flat_arrays(moon)
+	var verts: PackedVector3Array = arr["verts"]
+	var uvs: PackedVector2Array = arr["uvs"]
+
 	# North pole: the vertex with the highest y must be at direction +Y.
-	var top := verts[0]
-	for v in verts:
-		if v.y > top.y:
-			top = v
-	check("REQ-7: north pole direction maps to +Y",
-		vec_near(top.normalized(), Vector3.UP, 0.001), str(top.normalized()))
+	var top := 0
+	for i in verts.size():
+		if verts[i].y > verts[top].y:
+			top = i
+	check("M1 REQ-7 / REQ-17: north pole direction maps to +Y (within 0.001)",
+		vec_near(verts[top].normalized(), Vector3.UP, 0.001), str(verts[top].normalized()))
+	check("REQ-17: vertex nearest +Y is at latitude 90 N within 1 deg",
+		lat_of(verts[top]) > deg_to_rad(89.0), str(rad_to_deg(lat_of(verts[top]))))
 
-	# Vertex nearest UV (u=0, v=0.5) is (0 N, 0 E); u wraps, so use wrapped distance.
-	var best_i := _nearest_uv(uvs, Vector2(0.0, 0.5))
-	# The mesh has no vertex exactly on the equator (rings sit about 0.35 deg off), so use an angular tolerance.
-	check("REQ-7: (0 N, 0 E) direction maps to +Z (within 0.5 deg)",
-		verts[best_i].normalized().angle_to(Vector3.BACK) < deg_to_rad(0.5),
-		str(verts[best_i].normalized()))
+	# (0 N, 0 E) is on +Z. The vertex nearest +Z is checked for latitude and longitude within 1 deg.
+	var iz := nearest_index(verts, Vector3.BACK)
+	var lon_z := lon_of(verts[iz])
+	check("REQ-17: vertex nearest +Z is (0 N, 0 E) within 1 deg",
+		absf(lat_of(verts[iz])) < deg_to_rad(1.0) and minf(lon_z, TAU - lon_z) < deg_to_rad(1.0),
+		"lat %.3f lon %.3f" % [rad_to_deg(lat_of(verts[iz])), rad_to_deg(lon_z)])
+	check("M1 REQ-7: (0 N, 0 E) direction maps to +Z (within 0.5 deg)",
+		verts[iz].normalized().angle_to(Vector3.BACK) < deg_to_rad(0.5), str(verts[iz].normalized()))
 
-	# Equirectangular UV: longitude 90 E (u=0.25) lies on +X (east), consistent with +Z and +Y.
+	# (0 N, 90 E) is on +X.
+	var ix := nearest_index(verts, Vector3.RIGHT)
+	check("REQ-17: vertex nearest +X is (0 N, 90 E) within 1 deg",
+		absf(lat_of(verts[ix])) < deg_to_rad(1.0) and absf(lon_of(verts[ix]) - PI / 2.0) < deg_to_rad(1.0),
+		"lat %.3f lon %.3f" % [rad_to_deg(lat_of(verts[ix])), rad_to_deg(lon_of(verts[ix]))])
+
+	# M1 REQ-6 (kept): u = 0.25 (90 E on the equator) maps to +X, within 0.5 deg.
 	var east_i := _nearest_uv(uvs, Vector2(0.25, 0.5))
 	check("REQ-6: u=0.25 (90 E on equator) maps to +X (east), so texture is not mirrored (within 0.5 deg)",
 		verts[east_i].normalized().angle_to(Vector3.RIGHT) < deg_to_rad(0.5),
@@ -246,6 +418,225 @@ func test_moon_geometry() -> void:
 		worst = maxf(worst, verts[i].normalized().distance_to(expected))
 	check("REQ-6: every vertex matches the equirectangular mapping of its UV (max error %.5f)" % worst,
 		worst < 0.002, "max error %.5f" % worst)
+	free_main(main)
+
+
+# ---------------------------------------------------------------- M2 UV (REQ-18, sun REQ-4 revised seam rule)
+
+func test_moon_uv() -> void:
+	var main := spawn_main()
+	var moon := main.get_node("Moon") as Node3D
+	var chunks := chunks_of(moon)
+
+	var worst_span := 0.0
+	var triangles := 0
+	for c in chunks:
+		var arr: Array = c.mesh.surface_get_arrays(0)
+		var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		for t in range(0, idx.size(), 3):
+			var a := uv[idx[t]].x
+			var b := uv[idx[t + 1]].x
+			var d := uv[idx[t + 2]].x
+			worst_span = maxf(worst_span, maxf(a, maxf(b, d)) - minf(a, minf(b, d)))
+			triangles += 1
+	check("REQ-18: no triangle has u values differing by more than 0.5 (worst %.4f over %d triangles)" % [worst_span, triangles],
+		worst_span <= 0.5 and triangles == TOTAL_TRIANGLES,
+		"worst %.4f, triangles %d" % [worst_span, triangles])
+
+	# Sun spec REQ-4 (revised by M2 REQ-34): the cube-sphere vertices at +Z have u = 0 in the
+	# two east chunks and u = 1 in the two west chunks, tolerance 0.002.
+	var hits := 0
+	var east := 0
+	var west := 0
+	var bad := 0
+	for c in chunks:
+		var arr: Array = c.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var uvs: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var best := nearest_index(verts, Vector3.BACK)
+		if verts[best].angle_to(Vector3.BACK) > deg_to_rad(0.5):
+			continue
+		hits += 1
+		var centre := verts[(CHUNK_SIDE / 2) * CHUNK_SIDE + CHUNK_SIDE / 2]
+		var is_east := centre.x > 0.0
+		if is_east:
+			east += 1
+		else:
+			west += 1
+		var u: float = uvs[best].x
+		var ok := (is_east and absf(u) <= 0.002) or ((not is_east) and absf(u - 1.0) <= 0.002)
+		if not ok:
+			bad += 1
+	check("sun REQ-4 (revised): chunks at +Z give u = 0 in the two east chunks and u = 1 in the two west chunks (%d chunks, %d east, %d west)" % [hits, east, west],
+		hits == 4 and east == 2 and west == 2 and bad == 0, "hits %d east %d west %d bad %d" % [hits, east, west, bad])
+	free_main(main)
+
+
+# ---------------------------------------------------------------- M2 seams, normals, cell shape (REQ-19, REQ-20, REQ-21)
+
+func test_moon_seams() -> void:
+	var main := spawn_main()
+	var moon := main.get_node("Moon") as Node3D
+	var arr := flat_arrays(moon)
+	var verts: PackedVector3Array = arr["verts"]
+	var norms: PackedVector3Array = arr["norms"]
+
+	# REQ-19: vertices with the same direction (shared chunk or face edges) must agree.
+	var first := {}
+	var shared := 0
+	var max_dp := 0.0
+	var max_dn := 0.0
+	var clashes := 0
+	for i in verts.size():
+		var d := verts[i].normalized()
+		var key := "%.5f,%.5f,%.5f" % [d.x, d.y, d.z]
+		if not first.has(key):
+			first[key] = i
+			continue
+		shared += 1
+		var j: int = first[key]
+		var dp := verts[i].distance_to(verts[j])
+		var dn := (norms[i] - norms[j]).abs()
+		max_dp = maxf(max_dp, dp)
+		max_dn = maxf(max_dn, maxf(dn.x, maxf(dn.y, dn.z)))
+		if dp > 0.0001 or dn.x > 0.001 or dn.y > 0.001 or dn.z > 0.001:
+			clashes += 1
+	check("REQ-19: shared chunk and face edge vertices agree in position (1e-4) and normal (1e-3) (%d shared, max dp %.7f, max dn %.7f)" % [shared, max_dp, max_dn],
+		shared > 0 and clashes == 0, "%d clashes" % clashes)
+
+	# REQ-20: normals are unit length, point outward, and are not NaN.
+	var bad_normal := 0
+	var not_finite := 0
+	for i in norms.size():
+		var n := norms[i]
+		if not n.is_finite():
+			not_finite += 1
+			continue
+		if absf(n.length() - 1.0) > 1e-3 or n.dot(verts[i].normalized()) <= 0.0:
+			bad_normal += 1
+	check("REQ-20: every normal is unit length and points away from the centre (%d bad, %d not finite)" % [bad_normal, not_finite],
+		bad_normal == 0 and not_finite == 0)
+
+	# REQ-20: the vertex nearest (43.24 S, 347.34 E) on Tycho's west inner wall deviates by more than 2 deg.
+	var tycho := nearest_index(verts, dir_of(-43.24, 347.34))
+	var dev := rad_to_deg(norms[tycho].angle_to(verts[tycho]))
+	check("REQ-20: normal at (43.24 S, 347.34 E) deviates from the radial direction by more than 2 deg (%.2f deg)" % dev,
+		dev > 2.0, "%.3f deg" % dev)
+
+	# Rendering: Godot treats clockwise triangles as front faces, so each front face must have its
+	# geometric normal pointing into the Moon (against the outward direction of its centroid).
+	var inward_bad := 0
+	for c in chunks_of(moon):
+		var carr: Array = c.mesh.surface_get_arrays(0)
+		var cv: PackedVector3Array = carr[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = carr[Mesh.ARRAY_INDEX]
+		for t in range(0, idx.size(), 3):
+			var a := cv[idx[t]]
+			var b := cv[idx[t + 1]]
+			var d := cv[idx[t + 2]]
+			var geo := (b - a).cross(d - a)
+			if geo.dot(a + b + d) >= 0.0:
+				inward_bad += 1
+	check("REQ-20: all triangles are wound clockwise from outside (front faces face outward; %d wrong)" % inward_bad,
+		inward_bad == 0, "%d wrong" % inward_bad)
+
+	# REQ-21: longest / shortest triangle edge on the undisplaced cube-sphere is at most 3; no NaN.
+	var worst_ratio := 0.0
+	var nan_tris := 0
+	var mesh_longest := 0.0
+	var mesh_shortest := INF
+	for c in chunks_of(moon):
+		var carr: Array = c.mesh.surface_get_arrays(0)
+		var cv: PackedVector3Array = carr[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = carr[Mesh.ARRAY_INDEX]
+		for t in range(0, idx.size(), 3):
+			var p0 := cv[idx[t]].normalized() * REF_RADIUS_KM
+			var p1 := cv[idx[t + 1]].normalized() * REF_RADIUS_KM
+			var p2 := cv[idx[t + 2]].normalized() * REF_RADIUS_KM
+			var e0 := p0.distance_to(p1)
+			var e1 := p1.distance_to(p2)
+			var e2 := p2.distance_to(p0)
+			var shortest := minf(e0, minf(e1, e2))
+			var longest := maxf(e0, maxf(e1, e2))
+			if not is_finite(shortest) or not is_finite(longest):
+				nan_tris += 1
+				continue
+			mesh_longest = maxf(mesh_longest, longest)
+			mesh_shortest = minf(mesh_shortest, shortest)
+			if shortest <= 0.0:
+				worst_ratio = INF
+			else:
+				worst_ratio = maxf(worst_ratio, longest / shortest)
+	check("REQ-21: longest / shortest triangle edge (undisplaced) at most 3 (worst %.3f), no NaN (%d)" % [worst_ratio, nan_tris],
+		worst_ratio <= 3.0 and nan_tris == 0, "worst %.3f nan %d" % [worst_ratio, nan_tris])
+	# REQ-21 reads "over the whole mesh": longest edge of the whole mesh over shortest edge of the whole mesh.
+	var mesh_ratio: float = mesh_longest / mesh_shortest if mesh_shortest > 0.0 else INF
+	check("REQ-21: whole-mesh longest / shortest edge (undisplaced) at most 3 (%.4f = %.4f km / %.4f km)" % [mesh_ratio, mesh_longest, mesh_shortest],
+		mesh_ratio <= 3.0, "ratio %.4f" % mesh_ratio)
+	free_main(main)
+
+
+# ---------------------------------------------------------------- M3 material (M3 REQ-1 to REQ-3, REQ-16)
+# Replaces M1 REQ-9 and M2 REQ-22 (StandardMaterial3D) and the M1 REQ-6 material path.
+
+const SHADER := "res://shaders/lunar_surface.gdshader"
+
+
+func _regex_hit(text: String, pattern: String) -> bool:
+	var re := RegEx.new()
+	re.compile(pattern)
+	return re.search(text) != null
+
+
+func test_moon_material_and_texture() -> void:
+	var main := spawn_main()
+	var moon := main.get_node("Moon") as Node3D
+	var chunks := chunks_of(moon)
+	var first: Material = chunks[0].mesh.surface_get_material(0)
+	var shader_ok := 0
+	var shared_ok := 0
+	var override_set := 0
+	for c in chunks:
+		var m: Material = c.mesh.surface_get_material(0)
+		if m is ShaderMaterial and (m as ShaderMaterial).shader != null \
+				and str((m as ShaderMaterial).shader.resource_path) == SHADER:
+			shader_ok += 1
+		if m == first:
+			shared_ok += 1
+		if c.material_override != null:
+			override_set += 1
+	check("M3 REQ-1: every chunk uses a ShaderMaterial with res://shaders/lunar_surface.gdshader (%d of 96)" % shader_ok,
+		shader_ok == CHUNKS)
+	check("M3 REQ-1: all 96 chunks share one material instance (%d of 96)" % shared_ok, shared_ok == CHUNKS)
+	check("M3 REQ-1: no material_override on any chunk", override_set == 0, "override %d" % override_set)
+	var mat := first as ShaderMaterial
+	var albedo: Variant = mat.get_shader_parameter("albedo_texture") if mat != null else null
+	check("M1 REQ-6 / M3 REQ-1: albedo uniform is assets/textures/lunar_albedo_4096x2048.png",
+		albedo is Texture2D and str((albedo as Texture2D).resource_path) == TEXTURE,
+		"resource_path '%s'" % (str((albedo as Texture2D).resource_path) if albedo is Texture2D else "null"))
+	if albedo is Texture2D:
+		check("M1 REQ-6: albedo texture is 4096 x 2048 pixels",
+			(albedo as Texture2D).get_width() == 4096 and (albedo as Texture2D).get_height() == 2048,
+			"%d x %d" % [(albedo as Texture2D).get_width(), (albedo as Texture2D).get_height()])
+	var src := FileAccess.get_file_as_string(SHADER)
+	check("M3 REQ-1: albedo sampler uses source_color (sRGB) and anisotropic mipmapped linear filtering",
+		src.contains("uniform sampler2D albedo_texture : source_color, filter_linear_mipmap_anisotropic"))
+	check("M3 REQ-1: the shader writes no VERTEX (displacement stays in the mesh)",
+		not _regex_hit(src, "\\bVERTEX\\s*[-+*/]?=[^=]"))
+	check("M3 REQ-3: specular disabled, metallic 0, roughness 1.0",
+		src.contains("specular_disabled") and src.contains("METALLIC = 0.0") and src.contains("ROUGHNESS = 1.0"))
+	check("M3 REQ-3: the shader writes no EMISSION, RIM or CLEARCOAT",
+		not _regex_hit(src, "\\b(EMISSION|RIM|CLEARCOAT)\\s*[-+*/]?=[^=]"))
+	check("M3 REQ-2: Lommel-Seeliger term 2 cos i / (cos i + cos e), zero when cos i <= 0 or cos e <= 0",
+		src.contains("2.0 * cos_i / (cos_i + cos_e)") and src.contains("cos_i > 0.0 && cos_e > 0.0"))
+	check("M3 REQ-16: shading normal is the decoded map normal; the vertex normal is not added",
+		src.contains("texture(normal_texture, UV).rgb * 2.0 - 1.0") and not _regex_hit(src, "NORMAL\\s*\\+="))
+	var img := load_png_image(TEXTURE)
+	check("M1 REQ-6: texture file loads and is 4096 x 2048",
+		img != null and img.get_width() == 4096 and img.get_height() == 2048)
+	check("M1 REQ-6: texture file exists in the project (no procedural fallback)",
+		FileAccess.file_exists(TEXTURE))
 	free_main(main)
 
 
@@ -269,33 +660,7 @@ func _nearest_uv(uvs: PackedVector2Array, target: Vector2) -> int:
 	return best
 
 
-# ---------------------------------------------------------------- material and texture
-
-func test_moon_material_and_texture() -> void:
-	var main := spawn_main()
-	var moon := main.get_node("Moon") as MeshInstance3D
-	var mat := moon.mesh.material as StandardMaterial3D
-	check("REQ-9: Moon uses a StandardMaterial3D", mat != null)
-	if mat != null:
-		check("REQ-9: metallic == 0.0", mat.metallic == 0.0, str(mat.metallic))
-		check("REQ-9: roughness >= 0.9", mat.roughness >= 0.9, str(mat.roughness))
-		check("REQ-6: albedo texture is assets/textures/lunar_albedo_4096x2048.png",
-			mat.albedo_texture != null
-			and str(mat.albedo_texture.resource_path) == TEXTURE,
-			"resource_path '%s'" % (str(mat.albedo_texture.resource_path) if mat.albedo_texture else "null"))
-		if mat.albedo_texture != null:
-			check("REQ-6: albedo texture is 4096 x 2048 pixels",
-				mat.albedo_texture.get_width() == 4096 and mat.albedo_texture.get_height() == 2048,
-				"%d x %d" % [mat.albedo_texture.get_width(), mat.albedo_texture.get_height()])
-	var img := load_png_image(TEXTURE)
-	check("REQ-6: texture file loads and is 4096 x 2048",
-		img != null and img.get_width() == 4096 and img.get_height() == 2048)
-	check("REQ-6: texture file exists in the project (no procedural fallback)",
-		FileAccess.file_exists(TEXTURE))
-	free_main(main)
-
-
-# ---------------------------------------------------------------- REQ-8 seam
+# ---------------------------------------------------------------- M1 REQ-8 seam (visual check, metrics only)
 
 func test_texture_seam() -> void:
 	var img := load_png_image(TEXTURE)
@@ -329,7 +694,6 @@ func test_texture_seam() -> void:
 	others.sort()
 	var p99: float = others[int(0.99 * others.size())]
 	var median: float = others[others.size() / 2]
-	var wrap := means[w - 1 - 1]  # column 4094 vs 4095 is not the wrap; compute wrap below
 	var wrap_img_diff := 0.0
 	for r in range(0, h, 4):
 		wrap_img_diff += absf(img.get_pixel(w - 1, r).r - img.get_pixel(0, r).r) * 255.0
@@ -345,17 +709,40 @@ func test_texture_seam() -> void:
 
 # ---------------------------------------------------------------- sun
 
+# Fixture: one compact streamed line (REQ-23 format), copied from a one-shot CLI run.
+const SAMPLE_LINE := "{\"utc\": \"2026-11-11T07:12:52Z\",\"jd_tt\": 2461355.8014027774,\"frame\": \"IAU_MOON\",\"sun_dir_moon_fixed\": [-0.9365646881189394, 0.34944585405163825, -0.027095757136400347],\"sun_dir_godot\": [0.34944585405163825, -0.027095757136400347, -0.9365646881189394],\"subsolar_lon_deg\": 159.53872632518878,\"subsolar_lat_deg\": -1.5526625551431783,\"sun_distance_km\": 147749548.85429886,\"sun_angular_diameter_deg\": 0.5395728299926271,\"earth_pos_godot\": [15373.113318411877, 43997.629377675374, 399608.59165505646],\"earth_distance_km\": 402317.22623881476,\"earth_basis_godot\": [0.9879987208232214, 0.040536734027939336, 0.1490479816905495, -0.153844750217786, 0.3444360068617197, 0.9261185831239865, -0.013795668961862573, -0.9379342249707605, 0.34653869790601055],\"earth_sun_dir_godot\": [0.3484687714822985, -0.027325083608007894, -0.9369220112194147],\"earth_subsolar_lon_deg\": 67.75152092695275,\"earth_subsolar_lat_deg\": -17.340365191300577}"
+const SUN_DISC_DISTANCE := 40000.0
+const SUN_RADIUS_KM := 695700.0
+const SUN_SCRIPT := "res://scripts/sun_controller.gd"
+
+
+func sample() -> Dictionary:
+	return JSON.parse_string(SAMPLE_LINE)
+
+
+func line_from(d: Dictionary) -> String:
+	return JSON.stringify(d)
+
+
 func test_sun() -> void:
 	var main := spawn_main()
 	var sun := main.get_node("Sun") as DirectionalLight3D
 	var ctl = sun
-	# TEST_ISSUE fix: M1 REQ-12 (45/20) is replaced by sun-ephemeris REQ-15. The startup
-	# values are the subsolar longitude and latitude in assets/ephemeris/sun_moon_fixed.json.
-	var eph := read_ephemeris()
-	check("REQ-12 (replaced by sun-ephemeris REQ-15): default azimuth and elevation are the ephemeris subsolar values",
-		near(ctl.azimuth_deg, float(eph["subsolar_lon_deg"]), 0.0001)
-		and near(ctl.elevation_deg, float(eph["subsolar_lat_deg"]), 0.0001),
-		"az %.3f el %.3f" % [ctl.azimuth_deg, ctl.elevation_deg])
+	# Rev. 7 REQ-15: no Sun before the first streamed line (the tests run before any _process frame).
+	check("sun-ephemeris REQ-15: before the first line has_sun is false and the light is hidden",
+		ctl.has_sun == false and sun.visible == false, "has_sun %s visible %s" % [ctl.has_sun, sun.visible])
+	var az0: float = ctl.azimuth_deg
+	var el0: float = ctl.elevation_deg
+	var basis0 := sun.global_basis
+	for k in [KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN]:
+		send_key(key_press(k))
+	check("sun-ephemeris REQ-15: arrow keys have no effect before the first line",
+		ctl.azimuth_deg == az0 and ctl.elevation_deg == el0 and sun.global_basis.is_equal_approx(basis0),
+		"az %s el %s" % [ctl.azimuth_deg, ctl.elevation_deg])
+
+	ctl.apply_line(sample())
+	check("sun-ephemeris REQ-15: after a line has_sun is true and the light is visible",
+		ctl.has_sun and sun.visible)
 
 	ctl.set_sun(90.0, 30.0)
 	var fwd := -sun.global_basis.z
@@ -380,7 +767,7 @@ func test_sun() -> void:
 			and near(ctl.azimuth_deg, 77.0, 0.0001) and near(f.y, -signf(el), 0.001),
 			str(f))
 
-	# Keyboard controls (REQ-13), routed through the viewport input pipeline.
+	# Keyboard controls (REQ-13) once a Sun exists.
 	ctl.set_sun(45.0, 20.0)
 	send_key(key_press(KEY_RIGHT))
 	check("REQ-13: Right arrow changes azimuth by +5 (45 -> 50)",
@@ -417,22 +804,59 @@ func test_sun() -> void:
 
 # ---------------------------------------------------------------- sun ephemeris and sun disc (sun-ephemeris spec)
 
-const EPHEMERIS := "res://assets/ephemeris/sun_moon_fixed.json"
-const SUN_DISC_DISTANCE := 40000.0
-const SUN_RADIUS_KM := 695700.0
+func test_sun_stream_parsing() -> void:
+	var script := load(SUN_SCRIPT)
+	check("sun-ephemeris REQ-24: parse_line accepts a valid streamed line",
+		script.parse_line(SAMPLE_LINE) is Dictionary)
+	for key in ["utc", "jd_tt", "frame", "sun_dir_moon_fixed", "sun_dir_godot",
+			"subsolar_lon_deg", "subsolar_lat_deg", "sun_distance_km", "sun_angular_diameter_deg",
+			"earth_pos_godot", "earth_distance_km", "earth_basis_godot", "earth_sun_dir_godot",
+			"earth_subsolar_lon_deg", "earth_subsolar_lat_deg"]:
+		var d := sample()
+		d.erase(key)
+		check("sun-ephemeris REQ-24: parse_line rejects a line missing %s" % key,
+			script.parse_line(line_from(d)) == null)
+	for key in ["sun_dir_moon_fixed", "sun_dir_godot"]:
+		var d := sample()
+		d[key] = [1.0, 0.001, 0.0]  # length 1 + 5e-7 is inside 1 +/- 1e-6
+		check("sun-ephemeris REQ-24: parse_line accepts %s within 1 +/- 1e-6" % key,
+			script.parse_line(line_from(d)) is Dictionary)
+		d[key] = [1.0, 0.01, 0.0]  # length 1 + 5e-5
+		check("sun-ephemeris REQ-24: parse_line rejects non-unit %s" % key,
+			script.parse_line(line_from(d)) == null)
+	var low := sample()
+	low["sun_distance_km"] = 600000.0
+	check("sun-ephemeris REQ-24: parse_line rejects sun_distance_km below R_sun",
+		script.parse_line(line_from(low)) == null)
+	check("sun-ephemeris REQ-24: parse_line rejects a partial line",
+		script.parse_line(SAMPLE_LINE.left(80)) == null)
+	check("sun-ephemeris REQ-24: parse_line rejects non-JSON", script.parse_line("garbage") == null)
+	var src := FileAccess.get_file_as_string(SUN_SCRIPT)
+	check("sun-ephemeris REQ-24: helper path is ephemeris/target/x86_64-unknown-linux-musl/release/moon-ephemeris with --stream",
+		src.contains("\"res://ephemeris/target/x86_64-unknown-linux-musl/release/moon-ephemeris\"")
+		and src.contains("\"--stream\""))
+	check("sun-ephemeris REQ-15: sun_controller does not reference the ephemeris file",
+		not src.contains("sun_moon_fixed"))
 
 
-func read_ephemeris() -> Dictionary:
-	var parsed = JSON.parse_string(FileAccess.get_file_as_string(EPHEMERIS))
-	if parsed is Dictionary:
-		return parsed
-	return {}
+# REQ-25: bad lines return null from parse_line. The engine "Parse JSON failed" line must not appear;
+# that is checked on the make test output (grep), since a test cannot read engine stderr.
+func test_sun_bad_line_req25() -> void:
+	var script := load(SUN_SCRIPT)
+	var bad := {
+		"partial line": SAMPLE_LINE.left(80),
+		"partial line, half": SAMPLE_LINE.left(SAMPLE_LINE.length() / 2),
+		"non-JSON text": "garbage",
+		"empty line": "",
+		"JSON array": "[1, 2, 3]",
+	}
+	for label in bad:
+		check("REQ-25: parse_line returns null for a bad line (%s)" % label,
+			script.parse_line(bad[label]) == null)
 
 
 func test_sun_ephemeris_and_disc() -> void:
-	var eph := read_ephemeris()
-	check("sun-ephemeris REQ-14: committed ephemeris file has utc 2026-11-10T00:00:00Z",
-		eph.get("utc") == "2026-11-10T00:00:00Z", str(eph.get("utc")))
+	var eph := sample()
 	var lon := float(eph["subsolar_lon_deg"])
 	var lat := float(eph["subsolar_lat_deg"])
 	var gd: Array = eph["sun_dir_godot"]
@@ -446,17 +870,27 @@ func test_sun_ephemeris_and_disc() -> void:
 	var rig := main.get_node("CameraRig") as Node3D
 	var cam := rig.get_node("Camera3D") as Camera3D
 
-	# REQ-15: startup values come from the file and the light follows M1 REQ-11.
-	check("sun-ephemeris REQ-15: startup azimuth equals subsolar_lon_deg (+/- 0.001)",
+	# REQ-15 / REQ-25: no Sun before the first line.
+	disc.update_disc()
+	check("sun-ephemeris REQ-15: SunDisc hidden and light disabled before the first line",
+		disc.visible == false and sun.visible == false, "disc %s light %s" % [disc.visible, sun.visible])
+
+	# REQ-15: after a line, values come from that line and the light follows M1 REQ-11.
+	ctl.apply_line(ctl.parse_line(SAMPLE_LINE))
+	disc.update_disc()
+	check("sun-ephemeris REQ-15: SunDisc and light visible after a line",
+		disc.visible and sun.visible)
+	check("sun-ephemeris REQ-15: azimuth equals streamed subsolar_lon_deg (+/- 0.001)",
 		near(ctl.azimuth_deg, lon, 0.001), "%s vs %s" % [ctl.azimuth_deg, lon])
-	check("sun-ephemeris REQ-15: startup elevation equals subsolar_lat_deg (+/- 0.001)",
+	check("sun-ephemeris REQ-15: elevation equals streamed subsolar_lat_deg (+/- 0.001)",
 		near(ctl.elevation_deg, lat, 0.001), "%s vs %s" % [ctl.elevation_deg, lat])
 	var fwd := -sun.global_basis.z
 	check("sun-ephemeris REQ-15: light forward equals -sun_dir_godot per component (+/- 0.001)",
 		absf(fwd.x + gd[0]) <= 0.001 and absf(fwd.y + gd[1]) <= 0.001 and absf(fwd.z + gd[2]) <= 0.001,
 		str(fwd))
+	check("sun-ephemeris REQ-24: utc of the applied line is kept", ctl.utc == eph["utc"], ctl.utc)
 
-	# REQ-16: Right arrow once from the ephemeris start, then the disc follows the new direction.
+	# REQ-16: Right arrow once from the streamed values, then the disc follows the new direction.
 	send_key(key_press(KEY_RIGHT))
 	check("sun-ephemeris REQ-16: Right arrow once gives azimuth = subsolar_lon_deg + 5 (mod 360)",
 		near(ctl.azimuth_deg, fposmod(lon + 5.0, 360.0), 0.0001), str(ctl.azimuth_deg))
@@ -469,10 +903,15 @@ func test_sun_ephemeris_and_disc() -> void:
 	send_key(key_press(KEY_UP))
 	check("sun-ephemeris REQ-16: Up arrow once gives elevation = subsolar_lat_deg + 5",
 		near(ctl.elevation_deg, lat + 5.0, 0.0001), str(ctl.elevation_deg))
-	# Restore the ephemeris start state for the remaining checks.
-	ctl.set_sun(lon, lat)
+	# REQ-16: the next streamed line overwrites the manual change.
+	var nxt := sample()
+	nxt["utc"] = "2026-11-11T07:12:53Z"
+	ctl.apply_line(ctl.parse_line(line_from(nxt)))
 	disc.update_disc()
 	d = ctl.sun_direction()
+	check("sun-ephemeris REQ-16: next streamed line overwrites the manual change",
+		near(ctl.azimuth_deg, lon, 0.001) and near(ctl.elevation_deg, lat, 0.001) and ctl.utc == nxt["utc"],
+		"az %s el %s" % [ctl.azimuth_deg, ctl.elevation_deg])
 
 	# REQ-17: position, orientation, material and shadow settings at the default camera state.
 	check("sun-ephemeris REQ-17: SunDisc position = camera + 40000 d (+/- 1 unit), default camera state",
@@ -488,11 +927,12 @@ func test_sun_ephemeris_and_disc() -> void:
 	check("sun-ephemeris REQ-17: disc does not cast shadows",
 		disc.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, str(disc.cast_shadow))
 
-	# REQ-17 after zooming to the minimum distance (1737.9): centre still at camera + 40000 d.
-	for i in 50:
+	# M3 REQ-9: 29 notches in from 6000 reach the minimum, measured from the Moon's centre.
+	for i in 29:
 		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
-	check("sun-ephemeris REQ-17: after zooming in, camera distance is 1737.9 (minimum)",
-		near(cam.global_position.distance_to(rig.position), 1737.9, 0.01), str(cam.global_position))
+	check("sun-ephemeris REQ-17 (M3 REQ-9): after zooming in, camera distance from the Moon's centre is 1748.232 (minimum)",
+		near(cam.global_position.distance_to(main.get_node("Moon").global_position), 1748.232, 0.01),
+		str(cam.global_position))
 	disc.update_disc()
 	check("sun-ephemeris REQ-17: after zoom, SunDisc position = camera + 40000 d (+/- 1 unit)",
 		disc.global_position.distance_to(cam.global_position + d * SUN_DISC_DISTANCE) <= 1.0,
@@ -501,7 +941,7 @@ func test_sun_ephemeris_and_disc() -> void:
 	check("sun-ephemeris REQ-17: after zoom, disc normal points to the camera",
 		disc.global_basis.z.normalized().dot(to_cam) > 0.9999)
 
-	# REQ-18: world-space radius gives the true angular diameter from the camera.
+	# REQ-18: world-space radius from the streamed distance gives the true angular diameter.
 	var r: float = disc.global_basis.x.length()
 	check("sun-ephemeris REQ-18: disc scale is uniform (x, y, z lengths equal)",
 		near(disc.global_basis.y.length(), r, r * 1e-6) and near(disc.global_basis.z.length(), r, r * 1e-6),
@@ -512,17 +952,23 @@ func test_sun_ephemeris_and_disc() -> void:
 	var disc_ang := rad_to_deg(2.0 * atan(r / SUN_DISC_DISTANCE))
 	check("sun-ephemeris REQ-18: 2 atan(r / 40000) equals sun_angular_diameter_deg (+/- 0.001 deg)",
 		near(disc_ang, ang_deg, 0.001), "%s vs %s" % [disc_ang, ang_deg])
-	check("sun-ephemeris REQ-18: angular diameter is about 0.53 deg for the default date",
-		near(disc_ang, 0.53, 0.01), str(disc_ang))
-	ctl.set_sun(lon, lat)
+	check("sun-ephemeris REQ-18: angular diameter is within 0.52-0.54 deg",
+		disc_ang >= 0.52 and disc_ang <= 0.54, str(disc_ang))
+	# REQ-18: a line with a different distance changes the disc size.
+	var far := sample()
+	far["sun_distance_km"] = 152100000.0
+	ctl.apply_line(ctl.parse_line(line_from(far)))
+	disc.update_disc()
+	var r2: float = disc.global_basis.x.length()
+	var r2_expected := SUN_DISC_DISTANCE * SUN_RADIUS_KM / 152100000.0
+	check("sun-ephemeris REQ-18: disc radius follows the latest streamed distance",
+		near(r2, r2_expected, r2_expected * 1e-6), "%s vs %s" % [r2, r2_expected])
 
-	# REQ-19 geometry (occlusion by the Moon itself is a render check, see pending list).
 	check("sun-ephemeris REQ-19: far edge of the disc (D + r) is at most 40200 units",
 		SUN_DISC_DISTANCE + r <= 40200.0, str(SUN_DISC_DISTANCE + r))
 	check("sun-ephemeris REQ-19: camera far plane (>= 50000) contains the far edge of the disc (D + r)",
 		cam.far >= 50000.0 and cam.far >= SUN_DISC_DISTANCE + r, str(cam.far))
 
-	# REQ-20: disc colour is white or near-white.
 	if mat != null:
 		var c := mat.albedo_color
 		check("sun-ephemeris REQ-20: disc albedo channels are each >= 0.9",
@@ -532,43 +978,48 @@ func test_sun_ephemeris_and_disc() -> void:
 	free_main(main)
 
 
-# ---------------------------------------------------------------- audit (sun-ephemeris REQ-1..REQ-4)
+# ---------------------------------------------------------------- audit (sun-ephemeris REQ-1..REQ-4, revised by M2)
 
 func test_audit() -> void:
 	var main := spawn_main()
-	var moon := main.get_node("Moon") as MeshInstance3D
-	var mat := moon.mesh.surface_get_material(0) as StandardMaterial3D
-	check("sun-ephemeris REQ-1: Moon has no displacement material input (height map off) and no ShaderMaterial",
-		mat != null and not mat.heightmap_enabled and not (moon.mesh.surface_get_material(0) is ShaderMaterial)
-		and moon.material_override == null and not (moon.material_override is ShaderMaterial))
-	var sphere := moon.mesh as SphereMesh
-	check("sun-ephemeris REQ-2: Moon mesh radius is 1737.4", sphere != null and near(sphere.radius, 1737.4, 0.0001))
+	var moon := main.get_node("Moon") as Node3D
+	var chunks := chunks_of(moon)
+	# Sun REQ-1 (no displacement input) is replaced by M2 REQ-15 and M3 REQ-1: the displacement is in
+	# the mesh vertices, and the chunks use the lunar ShaderMaterial with no height input.
+	var plain := 0
+	for c in chunks:
+		var m: Material = c.mesh.surface_get_material(0)
+		if m is ShaderMaterial and (m as ShaderMaterial).get_shader_parameter("albedo_texture") != null \
+				and (m as ShaderMaterial).get_shader_parameter("height_texture") == null \
+				and c.material_override == null:
+			plain += 1
+	check("sun-ephemeris REQ-1 (M3 REQ-1): lunar ShaderMaterial, no height input, no material_override on any chunk (%d of 96)" % plain,
+		plain == CHUNKS)
+	# Sun REQ-2 (radius read from a sphere mesh) is replaced by M2 REQ-15 and REQ-30; the reference radius stays 1737.4.
+	check("sun-ephemeris REQ-2 (M2 REQ-15): Moon reference radius is 1737.4",
+		near(moon.reference_radius, REF_RADIUS_KM, 0.0001), str(moon.reference_radius))
 
+	# Sun REQ-3 (no elevation data documented) is replaced by M2 REQ-1, REQ-7 and REQ-11.
 	var text := FileAccess.get_file_as_string(DATA_SOURCES)
-	check("sun-ephemeris REQ-3: DATA_SOURCES states no elevation data is used yet",
-		text.contains("No elevation data is used yet"))
-	check("sun-ephemeris REQ-3: DATA_SOURCES says LOLA or SLDEM is planned for Milestone 2",
-		text.contains("LOLA or SLDEM") and text.contains("Milestone 2"))
-	var extra: Array = []
+	check("sun-ephemeris REQ-3 (M2 REQ-1): DATA_SOURCES has the Elevation (Milestone 2) section",
+		text.contains("## Elevation (Milestone 2)") and not text.contains("No elevation data is used yet"))
+	var found: Array = []
 	var dir := DirAccess.open("res://assets/elevation")
 	if dir != null:
 		for f in dir.get_files():
-			if f != ".gitkeep":
-				extra.append(f)
-	check("sun-ephemeris REQ-3: assets/elevation holds no file other than .gitkeep (found %s)" % str(extra),
-		dir != null and extra.is_empty() and FileAccess.file_exists("res://assets/elevation/.gitkeep"))
+			found.append(f)
+	found.sort()
+	# DirAccess.get_files() does not list hidden files, so .gitkeep is checked by path (as in M1).
+	var expected := ["lola_height_m_1024x512.f32", "lola_height_m_2048x1024.f32",
+		"lola_height_m_4096x2048.f32", "moon_data.json"]
+	check("sun-ephemeris REQ-3 (M2 REQ-7, REQ-11): assets/elevation holds exactly the four generated files (found %s)" % str(found),
+		found == expected and FileAccess.file_exists("res://assets/elevation/.gitkeep"), str(found))
 
-	# REQ-4: texture orientation at identity transform.
-	var verts: PackedVector3Array = moon.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var uvs: PackedVector2Array = moon.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
-	var ex := verts[_nearest_uv(uvs, Vector2(0.25, 0.5))]
-	check("sun-ephemeris REQ-4: point at 90 E (u = 0.25) lies on local +X (within 0.5 deg)",
-		ex.normalized().angle_to(Vector3.RIGHT) < deg_to_rad(0.5), str(ex.normalized()))
-	var iz := _nearest_uv(uvs, Vector2(0.0, 0.5))
-	var uz := uvs[iz].x
-	check("sun-ephemeris REQ-4: point at (0 N, 0 E) lies on local +Z with u = 0 or 1",
-		verts[iz].normalized().angle_to(Vector3.BACK) < deg_to_rad(0.5)
-		and (absf(uz) < 0.001 or absf(uz - 1.0) < 0.001), "u %s" % uz)
+	# Sun REQ-4 (UV at the axis points) is revised by M2 REQ-34. The pole and the +Z seam are checked in
+	# test_moon_uv (u = 0 or 1 at +Z); here the north pole maps to v = 0 on +Y.
+	var arr := flat_arrays(moon)
+	var verts: PackedVector3Array = arr["verts"]
+	var uvs: PackedVector2Array = arr["uvs"]
 	var top := 0
 	for i in verts.size():
 		if verts[i].y > verts[top].y:
@@ -610,7 +1061,7 @@ func test_camera() -> void:
 	# surface point. A 100 px right drag moves it right of screen centre; a 100 px
 	# down drag moves it below screen centre.
 	var moon_node := main.get_node("Moon") as Node3D
-	var surf_pt: Vector3 = moon_node.global_transform * Vector3(0, 0, 1737.4)
+	var surf_pt: Vector3 = moon_node.global_transform * Vector3(0, 0, REF_RADIUS_KM)
 	var vp_centre: Vector2 = cam.get_viewport().get_visible_rect().size * 0.5
 	var default_px: Vector2 = cam.unproject_position(surf_pt)
 	check("REQ-16: default view has (0 N, 0 E) at screen centre",
@@ -655,40 +1106,84 @@ func test_camera() -> void:
 	check("REQ-16: motion after button release does not orbit",
 		near(ctl.yaw_deg, yaw_before, 0.0001), str(ctl.yaw_deg))
 
-	# REQ-17 zoom in and out by one notch.
+	# M3 REQ-9 (Revision 3): distance * f^(+1 in, -1 out), f = 0.95 above 500 km altitude, sqrt(0.95) at or below it.
 	ctl.distance = 6000.0
+	ctl._apply()
 	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
-	check("REQ-17: one wheel notch in gives distance 5400 (+/- 0.5)",
-		near(ctl.distance, 5400.0, 0.5), str(ctl.distance))
+	check("M3 REQ-9: one wheel notch in from 6000 gives 5700.0 (+/- 0.01)",
+		near(ctl.distance, 5700.0, 0.01), str(ctl.distance))
 	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
-	check("REQ-17: one notch out from 5400 gives 6000 (+/- 0.5)",
-		near(ctl.distance, 6000.0, 0.5), str(ctl.distance))
+	check("M3 REQ-9: one notch out from 5700 gives 6000 (+/- 0.01)",
+		near(ctl.distance, 6000.0, 0.01), str(ctl.distance))
 
-	# REQ-18 limits.
-	for i in 50:
-		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
-	check("REQ-18: 50 notches in clamps distance at 1737.9",
-		near(ctl.distance, 1737.9, 0.001), str(ctl.distance))
-	for i in 50:
-		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
-	check("REQ-18: 50 notches out clamps distance at 20000",
-		near(ctl.distance, 20000.0, 0.001), str(ctl.distance))
-
-	# REQ-19 pan: 100 px right at distance 6000 moves pivot 60 units along camera left (grab rule).
+	# 19 and 20 notches in from 6000 (altitude above 500 km for both steps).
 	ctl.distance = 6000.0
-	ctl.pivot = Vector3.ZERO
+	ctl._apply()
+	for i in 19:
+		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: after 19 notches in from 6000, distance is 2264.12 (+/- 0.01)",
+		near(ctl.distance, 2264.12, 0.01), str(ctl.distance))
+	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: after 20 notches in from 6000, distance is 2150.92 (+/- 0.01)",
+		near(ctl.distance, 2150.92, 0.01), str(ctl.distance))
+	for i in 8:
+		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: 8 more notches (altitude at or below 500 km) give 1751.94 (+/- 0.01)",
+		near(ctl.distance, 1751.94, 0.01), str(ctl.distance))
+	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: the 9th notch stops at the minimum 1748.232 (+/- 0.001)",
+		near(ctl.distance, 1748.232, 0.001), str(ctl.distance))
+	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: a further notch never goes below 1748.232",
+		ctl.distance >= 1748.232 and near(ctl.distance, 1748.232, 0.001), str(ctl.distance))
+
+	# 29 notches in from 6000 reach the minimum.
+	ctl.distance = 6000.0
+	ctl._apply()
+	for i in 29:
+		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: 29 notches in from 6000 give 1748.232 (+/- 0.001)",
+		near(ctl.distance, 1748.232, 0.001), str(ctl.distance))
+
+	# Altitude exactly 500 km (distance 2237.4): one notch in uses sqrt(0.95).
+	ctl.distance = 2237.4
+	ctl._apply()
+	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("M3 REQ-9: at altitude 500 one notch in gives 2180.75 (+/- 0.01)",
+		near(ctl.distance, 2180.75, 0.01), str(ctl.distance))
+
+	# One notch out from the minimum (altitude 10.832): sqrt(0.95) step.
+	ctl.distance = 1748.232
+	ctl._apply()
+	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	check("M3 REQ-9: one notch out from 1748.232 gives 1793.65 (+/- 0.01)",
+		near(ctl.distance, 1793.65, 0.01), str(ctl.distance))
+
+	# 23 notches out from 6000 stay below 20000; the 24th reaches 20000.
+	ctl.distance = 6000.0
+	ctl._apply()
+	for i in 23:
+		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	check("M3 REQ-9: after 23 notches out from 6000, distance is 19521.2 (+/- 0.1)",
+		near(ctl.distance, 19521.2, 0.1), str(ctl.distance))
+	send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	check("M3 REQ-9: the 24th notch out clamps at 20000 (+/- 0.01)",
+		near(ctl.distance, 20000.0, 0.01), str(ctl.distance))
+
+	# Pivot at (500, 0, 0), 300 notches in: the camera stays at 1748.232 or more from the Moon's centre.
+	ctl.pivot = Vector3(500, 0, 0)
+	ctl.distance = 3000.0
 	ctl.yaw_deg = 0.0
 	ctl.pitch_deg = 0.0
 	ctl._apply()
-	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, false))
-	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, true))
-	var right := cam.global_basis.x
-	send_mouse(mouse_motion(Vector2(100, 0)))
-	check("REQ-19: middle drag 100 px right moves pivot 60 units in camera-left (+/- 0.5)",
-		vec_near(ctl.pivot, -right * 60.0, 0.5), str(ctl.pivot))
-	check("REQ-19: middle drag at yaw 0 moves pivot to (-60, 0, 0) (+/- 0.5)",
-		vec_near(ctl.pivot, Vector3(-60, 0, 0), 0.5), str(ctl.pivot))
-	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, false))
+	for i in 300:
+		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	var from_centre := cam.global_position.distance_to(moon_node.global_position)
+	check("M3 REQ-9: pivot (500, 0, 0), 300 notches in: distance from the Moon's centre is 1748.232 (+/- 0.001)",
+		near(from_centre, 1748.232, 0.001), str(from_centre))
+	ctl.pivot = Vector3.ZERO
+	ctl.distance = 6000.0
+	ctl._apply()
 
 	# REQ-15 orbit about an exported pivot that is not the origin.
 	ctl.pivot = Vector3(10, 0, 0)
@@ -709,7 +1204,260 @@ func test_camera() -> void:
 	free_main(main)
 
 
-# ---------------------------------------------------------------- data sources
+# ---------------------------------------------------------------- M3 camera (M3 REQ-6, REQ-9 to REQ-11)
+
+func test_m3_camera() -> void:
+	var main := spawn_main()
+	var rig := main.get_node("CameraRig")
+	var cam := rig.get_node("Camera3D") as Camera3D
+	var ctl = rig
+
+	# M3 REQ-11: startup look-around values, and the M1 REQ-21 view.
+	check("M3 REQ-11: tilt and heading are 0 at startup",
+		near(ctl.tilt_deg, 0.0, 1e-6) and near(ctl.heading_deg, 0.0, 1e-6),
+		"tilt %s heading %s" % [ctl.tilt_deg, ctl.heading_deg])
+	var expected := Basis.looking_at(Vector3(0, 0, -1), Vector3.UP)
+	var basis_err := 0.0
+	for i in 3:
+		basis_err = maxf(basis_err, cam.global_basis[i].distance_to(expected[i]))
+	check("M3 REQ-11: startup camera transform equals the M1 REQ-21 view (within 1e-4)",
+		basis_err < 1e-4 and cam.global_position.distance_to(Vector3(0, 0, 6000)) < 1e-4,
+		"basis error %s position %s" % [basis_err, cam.global_position])
+
+	# M3 REQ-11: right drag 1000 px down clamps tilt at 85; 100 px right gives heading -20; position unchanged.
+	var pos0 := cam.global_position
+	send_mouse(mouse_button(MOUSE_BUTTON_RIGHT, true))
+	send_mouse(mouse_motion(Vector2(0, 1000)))
+	check("M3 REQ-11: right drag 1000 px down clamps tilt at 85", near(ctl.tilt_deg, 85.0, 1e-4), str(ctl.tilt_deg))
+	send_mouse(mouse_motion(Vector2(100, 0)))
+	check("M3 REQ-11: right drag 100 px right from heading 0 gives heading -20 (+/- 0.001)",
+		near(ctl.heading_deg, -20.0, 0.001), str(ctl.heading_deg))
+	check("M3 REQ-11: look mode leaves the camera position unchanged (within 1e-4)",
+		cam.global_position.distance_to(pos0) < 1e-4, str(cam.global_position))
+	send_mouse(mouse_motion(Vector2(0, -3000)))
+	check("M3 REQ-11: right drag up clamps tilt at 0", near(ctl.tilt_deg, 0.0, 1e-4), str(ctl.tilt_deg))
+	send_mouse(mouse_button(MOUSE_BUTTON_RIGHT, false))
+	send_mouse(mouse_motion(Vector2(200, 0)))
+	check("M3 REQ-11: motion after right release does not change heading",
+		near(ctl.heading_deg, -20.0, 0.001), str(ctl.heading_deg))
+	send_mouse(mouse_button(MOUSE_BUTTON_RIGHT, true))
+	send_mouse(mouse_motion(Vector2(1000, 0)))
+	send_mouse(mouse_button(MOUSE_BUTTON_RIGHT, false))
+	check("M3 REQ-11: heading wraps to [-180, 180)",
+		ctl.heading_deg >= -180.0 and ctl.heading_deg < 180.0, str(ctl.heading_deg))
+	ctl.tilt_deg = 0.0
+	ctl.heading_deg = 0.0
+	ctl.distance = 6000.0
+	ctl.pivot = Vector3.ZERO
+	ctl.yaw_deg = 0.0
+	ctl.pitch_deg = 0.0
+	ctl._apply()
+
+	# M3 REQ-10: at distance 1748.232 (altitude 10.832) the rates are scaled by 10.832 / 4262.6.
+	ctl.distance = 1748.232
+	ctl.yaw_deg = 0.0
+	ctl.pitch_deg = 0.0
+	ctl._apply()
+	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
+	send_mouse(mouse_motion(Vector2(1000, 0)))
+	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, false))
+	check("M3 REQ-10: at 1748.232, left drag 1000 px changes yaw by 0.508 (+/- 0.005)",
+		near(absf(ctl.yaw_deg), 0.508, 0.005), str(ctl.yaw_deg))
+	ctl.yaw_deg = 0.0
+	ctl.pitch_deg = 0.0
+	ctl._apply()
+	var right: Vector3 = cam.global_basis.x
+	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, true))
+	send_mouse(mouse_motion(Vector2(1000, 0)))
+	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, false))
+	check("M3 REQ-10: at 1748.232, middle drag 1000 px moves the pivot 0.444 km camera-left (+/- 0.005)",
+		near(ctl.pivot.length(), 0.444, 0.005) and ctl.pivot.dot(right) < 0.0, str(ctl.pivot))
+	ctl.pivot = Vector3.ZERO
+	ctl.distance = 6000.0
+	ctl._apply()
+
+	free_main(main)
+
+
+# ---------------------------------------------------------------- M3 shadows (M3 REQ-5, REQ-6)
+
+func _shadow_distance_expected(d_c: float) -> float:
+	var near_term := sqrt(d_c * d_c - 1728.2 * 1728.2) if d_c >= 1728.2 else 0.0
+	return near_term + sqrt(1747.732 * 1747.732 - 1728.2 * 1728.2)
+
+
+func test_m3_shadows() -> void:
+	var main := spawn_main()
+	var sun := main.get_node("Sun") as DirectionalLight3D
+	var moon := main.get_node("Moon") as Node3D
+	var ctl = main.get_node("CameraRig")
+	var cam := ctl.get_node("Camera3D") as Camera3D
+	check("M3 REQ-5: Sun shadow_enabled is true", sun.shadow_enabled)
+	check("M3 REQ-5: directional_shadow_mode is SHADOW_PARALLEL_4_SPLITS",
+		sun.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS, str(sun.directional_shadow_mode))
+	check("M3 REQ-5: splits are 0.1, 0.2, 0.5 and blend splits is on",
+		near(sun.directional_shadow_split_1, 0.1, 1e-6) and near(sun.directional_shadow_split_2, 0.2, 1e-6)
+		and near(sun.directional_shadow_split_3, 0.5, 1e-6) and sun.directional_shadow_blend_splits)
+	check("M3 REQ-5: light_angular_distance is 0", near(sun.light_angular_distance, 0.0, 1e-6))
+	check("M3 REQ-5: project directional shadow size is 4096",
+		int(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/size")) == 4096)
+	var casting := 0
+	for c in chunks_of(moon):
+		if c.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON:
+			casting += 1
+	check("M3 REQ-5: all 96 chunks keep cast_shadow on (%d of 96)" % casting, casting == CHUNKS)
+
+	# M3 REQ-6: max shadow distance follows S(D_c) with D_c from the Moon's centre.
+	var cases := [[1748.232, 524.5], [6000.0, 6006.3], [20000.0, 20185.8]]
+	for case in cases:
+		ctl.pivot = Vector3.ZERO
+		ctl.distance = case[0]
+		ctl._apply()
+		check("M3 REQ-6: pivot at centre, distance %s gives max shadow distance %s (+/- 0.5)" % [case[0], case[1]],
+			near(sun.directional_shadow_max_distance, case[1], 0.5), str(sun.directional_shadow_max_distance))
+	ctl.pivot = Vector3(500, 0, 0)
+	ctl.distance = 3000.0
+	ctl.yaw_deg = 0.0
+	ctl.pitch_deg = 0.0
+	ctl._apply()
+	var d_c := cam.global_position.distance_to(moon.global_position)
+	check("M3 REQ-6 (pivot offset): pivot (500, 0, 0), distance 3000 gives S(D_c) with D_c from the centre (+/- 0.5)",
+		near(sun.directional_shadow_max_distance, _shadow_distance_expected(d_c), 0.5),
+		"D_c %s max %s" % [d_c, sun.directional_shadow_max_distance])
+	free_main(main)
+
+
+# ---------------------------------------------------------------- M3 docs (M3 REQ-18, REQ-22)
+
+## Digits in groups of three separated by spaces, as PERFORMANCE.md writes byte counts.
+func _grouped_digits(n: int) -> String:
+	var digits := str(n)
+	var out := ""
+	var i := digits.length()
+	while i > 3:
+		out = " " + digits.substr(i - 3, 3) + out
+		i -= 3
+	return digits.substr(0, i) + out
+
+
+func test_m3_docs() -> void:
+	var ds := FileAccess.get_file_as_string(DATA_SOURCES)
+	var arch := FileAccess.get_file_as_string(ARCHITECTURE)
+	var perf := FileAccess.get_file_as_string("res://docs/PERFORMANCE.md")
+	var png_path := "res://assets/textures/lunar_normal_enu_4096x2048.png"
+	var level_path := "res://assets/elevation/lola_height_m_4096x2048.f32"
+	check("M3 REQ-18: DATA_SOURCES has the 'Normal map (Milestone 3)' section",
+		ds.contains("## Normal map (Milestone 3)"))
+	var level_sha := FileAccess.get_sha256(level_path)
+	var png_sha := FileAccess.get_sha256(png_path)
+	check("M3 REQ-18: DATA_SOURCES lists the source level SHA-256 (%s)" % level_sha.left(12),
+		level_sha != "" and ds.contains(level_sha))
+	check("M3 REQ-18: DATA_SOURCES lists the output PNG SHA-256 (%s)" % png_sha.left(12),
+		png_sha != "" and ds.contains(png_sha))
+	check("M3 REQ-18: DATA_SOURCES gives the k rule, both commands and the no-smoothing statement",
+		ds.contains("k rule") and ds.contains("make normal-map") and ds.contains("make moon-data")
+		and ds.contains("smoothing"))
+	check("M3 REQ-22: ARCHITECTURE.md replaces the shared StandardMaterial3D text with the lunar shader",
+		not arch.contains("one shared StandardMaterial3D") and arch.contains("lunar_surface.gdshader"))
+	var png_size := FileAccess.get_file_as_bytes(png_path).size()
+	check("M3 REQ-22: PERFORMANCE.md gives the normal map file size (%d bytes) and the 42.7 MiB estimate" % png_size,
+		(perf.contains(str(png_size)) or perf.contains(_grouped_digits(png_size))) and perf.contains("42.7 MiB"))
+	check("M3 REQ-22: PERFORMANCE.md lists the shadow settings and the pending user run rows",
+		perf.contains("directional_shadow_max_distance") and perf.contains("shadow_bias")
+		and perf.contains("pending user run"))
+
+
+# ---------------------------------------------------------------- M2 elevation assets (REQ-6, REQ-7, REQ-8, REQ-11, REQ-29)
+
+func test_elevation_assets() -> void:
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(METADATA))
+	check("REQ-11: assets/elevation/moon_data.json parses as a JSON object", parsed is Dictionary)
+	if not (parsed is Dictionary):
+		return
+	var levels: Array = parsed.get("elevation_levels", [])
+	check("REQ-11: three elevation levels are listed", levels.size() == 3, str(levels.size()))
+	var convention := str(parsed.get("grid_convention", ""))
+	var extent_ref := {"lon_west_deg": 0.0, "lon_east_deg": 360.0, "lat_north_deg": 90.0, "lat_south_deg": -90.0}
+	var want_sizes := [[4096, 2048], [2048, 1024], [1024, 512]]
+	var fields := ["path", "width", "height", "data_type", "byte_order", "units", "grid_convention", "extent",
+		"reference_radius_m", "min", "max", "mean", "nodata_count", "sha256"]
+	for i in range(min(levels.size(), 3)):
+		var e: Dictionary = levels[i]
+		var w: int = want_sizes[i][0]
+		var h: int = want_sizes[i][1]
+		var missing := []
+		for f in fields:
+			if not e.has(f):
+				missing.append(f)
+		check("REQ-11: level %dx%d lists every field (missing %s)" % [w, h, str(missing)], missing.is_empty())
+		check("REQ-7: level %dx%d has the expected width and height" % [w, h],
+			int(e.get("width", 0)) == w and int(e.get("height", 0)) == h)
+		var path := "res://" + str(e.get("path", ""))
+		var bytes := FileAccess.get_file_as_bytes(path)
+		check("REQ-7: %s is %d bytes (samples x lines x 4)" % [path, w * h * 4], bytes.size() == w * h * 4,
+			str(bytes.size()))
+		check("REQ-11: %s SHA-256 matches the metadata" % path,
+			FileAccess.get_sha256(path) == str(e.get("sha256", "")))
+		var vals := bytes.to_float32_array()
+		var vmin := INF
+		var vmax := -INF
+		var sum := 0.0
+		var n := 0
+		var nan_count := 0
+		for v in vals:
+			if is_nan(v):
+				nan_count += 1
+				continue
+			vmin = minf(vmin, v)
+			vmax = maxf(vmax, v)
+			sum += v
+			n += 1
+		var mean := sum / n
+		check("REQ-11: %dx%d min, max and mean recomputed from the file match the metadata" % [w, h],
+			near(vmin, float(e.get("min", 0.0)), 0.001) and near(vmax, float(e.get("max", 0.0)), 0.001)
+			and near(mean, float(e.get("mean", 0.0)), 0.001),
+			"min %s max %s mean %s" % [vmin, vmax, mean])
+		check("REQ-6: %dx%d NoData count is %d in the file and in the metadata" % [w, h, nan_count],
+			nan_count == 0 and int(e.get("nodata_count", -1)) == nan_count)
+		check("REQ-8: %dx%d grid convention and extent are the REQ-8 values" % [w, h],
+			str(e.get("grid_convention", "")) == convention and e.get("extent") == extent_ref)
+		check("REQ-11: %dx%d reference radius is 1737400 m" % [w, h],
+			near(float(e.get("reference_radius_m", 0.0)), 1737400.0, 0.001))
+
+	var albedo: Dictionary = parsed.get("albedo", {})
+	check("REQ-8/REQ-29: albedo entry names the texture and its size",
+		str(albedo.get("path", "")) == "assets/textures/lunar_albedo_4096x2048.png"
+		and int(albedo.get("width", 0)) == 4096 and int(albedo.get("height", 0)) == 2048)
+	check("REQ-11: albedo SHA-256 matches the texture file and the metadata",
+		FileAccess.get_sha256(TEXTURE) == str(albedo.get("sha256", "")) and FileAccess.get_sha256(TEXTURE) != "")
+	var same_grid: bool = str(albedo.get("grid_convention", "")) == convention and albedo.get("extent") == extent_ref
+	for e in levels:
+		same_grid = same_grid and str(e.get("grid_convention", "")) == convention and e.get("extent") == extent_ref
+	check("REQ-29: the albedo and every elevation level share the grid convention and extents", same_grid)
+
+	var sources: Dictionary = parsed.get("sources", {})
+	var elev: Dictionary = sources.get("elevation", {})
+	var src_files: Array = elev.get("files", [])
+	var src_ok := src_files.size() == 2
+	for f in src_files:
+		var fname := str(f.get("path", "")).get_file()
+		var raw := RAW_DEM_DIR + fname
+		src_ok = src_ok and FileAccess.file_exists(raw) and FileAccess.get_sha256(raw) == str(f.get("sha256", ""))
+	check("REQ-11: source label and image SHA-256 match data/raw/lola_ldem_64", src_ok)
+	check("REQ-11: source product and version recorded", str(elev.get("product_id", "")) == "LDEM_64"
+		and str(elev.get("product_version_id", "")) == "V3.1" and str(elev.get("data_set_id", "")) == "LRO-L-LOLA-4-GDR-V1.0")
+	check("REQ-11: source scaling factor 0.5 and offset 1737400 m are recorded from the label",
+		near(float(elev.get("scaling_factor_m_per_dn", 0.0)), 0.5, 1e-9) and near(float(elev.get("offset_m", 0.0)), 1737400.0, 1e-3))
+	check("REQ-6: the label has no missing constant (recorded as null)", elev.get("missing_constant") == null)
+	var generator: Dictionary = parsed.get("generator", {})
+	check("REQ-11: generator records crate moon-data, version and toolchain",
+		str(generator.get("crate", "")) == "moon-data" and str(generator.get("version", "")) != ""
+		and str(generator.get("rust_toolchain", "")) != "")
+	check("REQ-8: metadata grid convention is the REQ-8 statement",
+		convention.contains("360*(x+0.5)/W deg E") and convention.contains("90-180*(y+0.5)/H deg"))
+
+
+# ---------------------------------------------------------------- data sources (M1 REQ-22, REQ-25)
 
 func test_data_sources() -> void:
 	var text := FileAccess.get_file_as_string(DATA_SOURCES)
@@ -766,6 +1514,59 @@ func test_data_sources() -> void:
 		"checked %d, mismatched %s" % [raw_checked, str(raw_bad)])
 
 
+# ---------------------------------------------------------------- M2 documentation (REQ-1, REQ-2, REQ-33)
+
+func test_docs_m2() -> void:
+	var ds := FileAccess.get_file_as_string(DATA_SOURCES)
+	var ldem_items := {
+		"product LDEM_64": "LDEM_64",
+		"data set id": "LRO-L-LOLA-4-GDR-V1.0",
+		"exact IMG URL (lower case as served)": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ldem_64.img",
+		"exact LBL URL (lower case as served)": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ldem_64.lbl",
+		"retrieval date": "Retrieval date",
+		"sample and line counts": "23040",
+		"lines": "11520",
+		"pixels per degree": "64 pixels per degree",
+		"projection": "SIMPLE CYLINDRICAL",
+		"units": "METER",
+		"scaling factor": "SCALING_FACTOR",
+		"offset": "OFFSET",
+		"offset value": "1737400",
+		"vertical reference": "Vertical reference",
+		"NoData finding": "NoData",
+		"license text": "License",
+		"citation": "Smith",
+	}
+	for k in ldem_items:
+		check("REQ-1: Elevation section lists %s" % k, ds.contains(ldem_items[k]))
+	check("REQ-1: Elevation section is a numbered Milestone 2 section", ds.contains("## Elevation (Milestone 2)"))
+	check("REQ-1: the M1 'No elevation data is used yet' text is replaced",
+		not ds.contains("No elevation data is used yet"))
+	for name in ["LDEM_64.LBL", "LDEM_64.IMG"]:
+		var sha := FileAccess.get_sha256(RAW_DEM_DIR + name)
+		check("REQ-1: SHA-256 of %s (%s) is documented" % [name, sha.left(12)],
+			sha != "" and ds.contains(sha))
+
+	check("REQ-2: resolution decision section names 64 ppd versus 512 ppd SLDEM2015",
+		ds.contains("Resolution decision") and ds.contains("64 ppd") and ds.contains("512 ppd") and ds.contains("SLDEM2015"))
+	check("REQ-2: resolution reasons include the mesh spacing, the missing poles and the data size",
+		ds.contains("vertex spacing") and ds.contains("poles") and ds.contains("tens of gigabytes"))
+
+	var arch := FileAccess.get_file_as_string(ARCHITECTURE)
+	check("REQ-33: ARCHITECTURE.md documents the cube-sphere chunk layout", arch.contains("## Cube-sphere chunk layout"))
+	check("REQ-33: ARCHITECTURE.md explains why the cube-sphere avoids polar distortion",
+		arch.contains("Why a cube-sphere avoids polar distortion"))
+	check("REQ-33: ARCHITECTURE.md gives the vertex count 6 x 16 x 65 x 65 = 405 600",
+		arch.contains("6 x 16 x 65 x 65 = 405 600"))
+	check("REQ-33: ARCHITECTURE.md gives the height level used and why",
+		arch.contains("### Height level used") and arch.contains("2048 x 1024"))
+	check("REQ-33: ARCHITECTURE.md gives the measured build time",
+		arch.contains("### Build cost") and arch.contains("terrain build ms"))
+	check("REQ-33: ARCHITECTURE.md gives the transition path (LOD, chunk loading, 512 ppd regional tiles)",
+		arch.contains("## Chunk, LOD and streaming design") and arch.contains("LOD")
+		and arch.contains("SLDEM2015") and arch.contains("512 ppd"))
+
+
 # ---------------------------------------------------------------- repo scan (REQ-23)
 
 func test_repo_scan() -> void:
@@ -811,3 +1612,263 @@ func _collect(dir_path: String, out: Array[String]) -> void:
 	if dir_path == "res://":
 		out.append("res://docs/DATA_SOURCES.md")
 		out.append("res://Makefile")
+
+
+# ---------------------------------------------------------------- earth (earth-milestone-1-basic-earth spec)
+
+const EARTH_DIR := "res://assets/earth/bmng/"
+const EARTH_FILES := ["world.200401.3x5400x2700.jpg", "world.200402.3x5400x2700.jpg",
+	"world.200403.3x5400x2700.jpg", "world.200404.3x5400x2700.jpg", "world.200405.3x5400x2700.jpg",
+	"world.200406.3x5400x2700.jpg", "world.200407.3x5400x2700.jpg", "world.200408.3x5400x2700.jpg",
+	"world.200409.3x5400x2700.jpg", "world.200410.3x5400x2700.jpg", "world.200411.3x5400x2700.jpg",
+	"world.200412.3x5400x2700.jpg"]
+const EARTH_BYTES := [1884678, 1865311, 1830489, 1774173, 1735263, 1692239, 1617810, 1616254, 1709729,
+	1766694, 1851209, 1878742]
+const EARTH_SHA256 := ["99f5faad74efe985fbf1714c8be7296ca9999759a1215b65f99b7f1df278dde5",
+	"252444b224c7dc10289616fb5e3cd85c3738fca9ddbdc267775cd22a748bbfbe",
+	"0d9967be048b5e2ba62195dd610042c9e0926b4eb9d1e9ae53dbf20eaadd9228",
+	"8db8d5e545b31cde0e4e5dfa46cb116bf485243a0200c2d6e4b04b4e6937f669",
+	"d9a8dfc0a3e54775c3a4aeb547c729f710bb588d82d4602252d7cd7bf43a38ef",
+	"dc059529b8ed1cfcdd59747a7c3f259c93c1322bf88ca1ec8bab1dd71fcc57f5",
+	"f55226d46d27e05511f2118dc6aa24f5dbf9b6b2cddc87cc6e0e7dd067c00b11",
+	"2048023ccc62250c677c0f4b03d4362f997b130eb0154a6cad00aa1b27c390b9",
+	"ed72e87674861f72e2a6e5df52f0cc6bf3df1edd9b862664cf18ac423e2e9e0e",
+	"ccfd9b7a5e5ee601e1466556716bba50ea418f3a8e068ab0194ae0425815b1b0",
+	"d63de0bb4274a7d9df08d2f69eeffc849d0f7aca157c4401f9bd2e41af63b178",
+	"3d38a8ecaceb1cdb51ced7f831e9ac18d261950049616feff6892efcae0dcc26"]
+
+
+## Colour samples of an image on a 20 x 10 grid, used to tell which monthly image is shown.
+func _earth_sig(img: Image) -> Array:
+	var out := []
+	var w := img.get_width()
+	var h := img.get_height()
+	for iy in 10:
+		for ix in 20:
+			out.append(img.get_pixel(ix * w / 20 + 7, iy * h / 10 + 3))
+	return out
+
+
+## Nearest mesh vertex to a unit direction (EarthRoot space); returns its UV.
+func _earth_uv_toward(verts: PackedVector3Array, uvs: PackedVector2Array, xf: Transform3D, dir: Vector3) -> Vector2:
+	var best := -2.0
+	var best_uv := Vector2.ZERO
+	for i in verts.size():
+		var p := (xf * verts[i]).normalized()
+		var c := p.dot(dir)
+		if c > best:
+			best = c
+			best_uv = uvs[i]
+	return best_uv
+
+
+func test_earth() -> void:
+	var main := spawn_main()
+	var er := main.get_node("EarthRoot") as Node3D
+	var surf := er.get_node("EarthSurface") as MeshInstance3D
+	var ec = er.get_node("EarthController")
+	var sun = main.get_node("Sun")
+	var sun_script = load(SUN_SCRIPT)
+	var d := sample()
+	var earth_pos := Vector3(d["earth_pos_godot"][0], d["earth_pos_godot"][1], d["earth_pos_godot"][2])
+	var sun_dir := Vector3(d["sun_dir_godot"][0], d["sun_dir_godot"][1], d["sun_dir_godot"][2])
+	var earth_sun := Vector3(d["earth_sun_dir_godot"][0], d["earth_sun_dir_godot"][1], d["earth_sun_dir_godot"][2])
+
+	# REQ-18: before the first streamed line the Sun light is disabled and Earth hidden.
+	check("earth REQ-18: EarthRoot hidden before the first streamed line", not er.visible)
+	check("earth REQ-18: Sun light disabled before the first streamed line", not (sun as Light3D).visible)
+
+	# REQ-7: scene structure.
+	check("earth REQ-7: EarthRoot is a Node3D and a direct child of Main (sibling of Moon)",
+		er is Node3D and er.get_parent() == main)
+	var kids := []
+	for c in er.get_children():
+		kids.append(str(c.name))
+	kids.sort()
+	check("earth REQ-7: EarthRoot children are exactly EarthController and EarthSurface",
+		kids == ["EarthController", "EarthSurface"], str(kids))
+	check("earth REQ-7: EarthSurface is a MeshInstance3D with a SphereMesh", surf is MeshInstance3D and surf.mesh is SphereMesh)
+	check("earth REQ-7: EarthRoot is not under the camera rig", not main.get_node("CameraRig").is_ancestor_of(er))
+	var scene_text := FileAccess.get_file_as_string("res://scenes/main.tscn").to_lower()
+	check("earth REQ-7: no skybox, billboard, sprite or panorama sky in the main scene",
+		not scene_text.contains("panorama") and not scene_text.contains("sprite") and not scene_text.contains("billboard")
+		and not scene_text.contains("skybox"))
+
+	# REQ-8: radius and tessellation.
+	var sm := surf.mesh as SphereMesh
+	var r_eff := sm.radius * surf.global_transform.basis.x.length() * er.global_transform.basis.x.length()
+	check("earth REQ-8: rendered radius 6371.0 +/- 0.5 units", near(r_eff, 6371.0, 0.5), str(r_eff))
+	check("earth REQ-8: at least 64 radial segments and 32 rings",
+		sm.radial_segments >= 64 and sm.rings >= 32, "%d segments, %d rings" % [sm.radial_segments, sm.rings])
+
+	# REQ-11: clip planes.
+	var cam := main.get_node("CameraRig/Camera3D") as Camera3D
+	check("earth REQ-11: camera near plane <= 0.01", cam.near <= 0.01, str(cam.near))
+	check("earth REQ-11: camera far plane >= 440000", cam.far >= 440000.0, str(cam.far))
+
+	# REQ-9: applied line sets position and orientation.
+	var parsed = sun_script.parse_line(SAMPLE_LINE)
+	check("earth REQ-9: sample line parses", parsed is Dictionary)
+	sun.apply_line(parsed)
+	check("earth REQ-9: EarthRoot visible after a valid line", er.visible)
+	var gt := er.global_transform
+	check("earth REQ-9: EarthRoot origin equals earth_pos_godot within 1 unit",
+		vec_near(gt.origin, earth_pos, 1.0), str(gt.origin))
+	var b: Array = d["earth_basis_godot"]
+	var cols := [gt.basis.x, gt.basis.y, gt.basis.z]
+	var max_err := 0.0
+	for i in 3:
+		for j in 3:
+			max_err = maxf(max_err, absf(cols[j][i] - b[3 * i + j]))
+	check("earth REQ-9: global basis equals earth_basis_godot (row-major) within 1e-6 per element",
+		max_err <= 1e-6, str(max_err))
+
+	# REQ-10: orbit, zoom and pan do not move EarthRoot.
+	var before := er.global_transform
+	for i in 50:
+		send_mouse(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, true))
+	send_mouse(mouse_motion(Vector2(100, 0)))
+	send_mouse(mouse_button(MOUSE_BUTTON_LEFT, false))
+	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, true))
+	send_mouse(mouse_motion(Vector2(100, 0)))
+	send_mouse(mouse_button(MOUSE_BUTTON_MIDDLE, false))
+	check("earth REQ-10: EarthRoot global transform unchanged by zoom, orbit and pan",
+		er.global_transform.is_equal_approx(before))
+
+	# REQ-20: shared Sun direction.
+	var fwd := -(sun as Node3D).global_transform.basis.z
+	check("earth REQ-20: light forward equals -sun_dir_godot within 0.001 per component",
+		absf(fwd.x + sun_dir.x) <= 0.001 and absf(fwd.y + sun_dir.y) <= 0.001 and absf(fwd.z + sun_dir.z) <= 0.001,
+		str(fwd))
+	var ang_sun := rad_to_deg(sun_dir.angle_to(earth_sun))
+	check("earth REQ-20: angle between earth_sun_dir_godot and sun_dir_godot <= 0.2 deg", ang_sun <= 0.2, str(ang_sun))
+
+	# REQ-19: apparent size from the scene, camera at the minimum distance on the line to Earth.
+	var d_km := float(d["earth_distance_km"])
+	cam.global_position = earth_pos.normalized() * 1748.232
+	var cam_dist := cam.global_position.distance_to(er.global_position)
+	var ang_scene := rad_to_deg(2.0 * asin(r_eff / cam_dist))
+	var ang_formula := rad_to_deg(2.0 * asin(6371.0 / (d_km - 1748.232)))
+	check("earth REQ-19: scene angular diameter equals 2 asin(6371 / (distance - 1748.232)) within 0.001 deg",
+		absf(ang_scene - ang_formula) <= 0.001, "%f vs %f" % [ang_scene, ang_formula])
+	check("earth REQ-19: angular diameter for this line is in 1.79 to 2.06 deg",
+		ang_scene >= 1.79 and ang_scene <= 2.06, str(ang_scene))
+	var ang_at_min := rad_to_deg(2.0 * asin(6371.0 / (356400.0 - 1748.232)))
+	var ang_at_max := rad_to_deg(2.0 * asin(6371.0 / (406700.0 - 1748.232)))
+	check("earth REQ-19: angular diameter lies in 1.79 to 2.06 deg over the Earth distance range 356 400 to 406 700 km",
+		ang_at_max >= 1.79 and ang_at_min <= 2.06, "min-distance %f deg, max-distance %f deg" % [ang_at_min, ang_at_max])
+
+	# REQ-13: UV mapping of the sphere in EarthRoot space (identity Earth-fixed frame).
+	var arrs := surf.mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrs[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrs[Mesh.ARRAY_TEX_UV]
+	var uv_x := _earth_uv_toward(verts, uvs, surf.transform, Vector3(1, 0, 0))
+	var uv_y := _earth_uv_toward(verts, uvs, surf.transform, Vector3(0, 1, 0))
+	var uv_z := _earth_uv_toward(verts, uvs, surf.transform, Vector3(0, 0, 1))
+	check("earth REQ-13: +x (0 deg N, 0 deg E) maps to u = 0.5, v = 0.5", near(uv_x.x, 0.5, 0.01) and near(uv_x.y, 0.5, 0.01), str(uv_x))
+	check("earth REQ-13: +y (0 deg N, 90 deg E) maps to u = 0.75 (not mirrored)", near(uv_y.x, 0.75, 0.01), str(uv_y))
+	check("earth REQ-13: +z (north pole) maps to v = 0", near(uv_z.y, 0.0, 0.01), str(uv_z))
+
+	# REQ-12: texture files, sizes, hashes, decoded size and mipmaps.
+	var mat := surf.get_surface_override_material(0) as StandardMaterial3D
+	var all_ok := true
+	var bad_detail := ""
+	for i in 12:
+		var path: String = EARTH_DIR + EARTH_FILES[i]
+		var size_ok: bool = FileAccess.file_exists(path) and FileAccess.get_file_as_bytes(path).size() == EARTH_BYTES[i]
+		var sha_ok: bool = FileAccess.file_exists(path) and FileAccess.get_sha256(path) == EARTH_SHA256[i]
+		var img := Image.load_from_file(path) if FileAccess.file_exists(path) else null
+		var dim_ok := img != null and img.get_width() == 5400 and img.get_height() == 2700
+		if not (size_ok and sha_ok and dim_ok):
+			all_ok = false
+			bad_detail += " %s(size=%s sha=%s dim=%s)" % [EARTH_FILES[i], size_ok, sha_ok, dim_ok]
+	check("earth REQ-12: 12 monthly JPGs present, byte size, SHA-256 and decoded 5400 x 2700 as in docs/DATA_SOURCES.md",
+		all_ok, bad_detail)
+	check("earth REQ-12: material holds only the albedo texture (no normal, roughness, metallic, emission, AO or detail texture)",
+		mat != null and mat.albedo_texture != null and mat.normal_texture == null and mat.roughness_texture == null
+		and mat.metallic_texture == null and mat.emission_texture == null and mat.ao_texture == null
+		and mat.detail_albedo == null)
+
+	# REQ-25: lighting by the existing scene Sun light only.
+	check("earth REQ-25: Earth material is lit (not unshaded) and opaque",
+		mat.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED and mat.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED)
+	var lights := main.find_children("*", "Light3D", true, false)
+	check("earth REQ-25: the Sun is the only light in the main scene", lights.size() == 1 and lights[0].name == "Sun",
+		str(lights.size()))
+	var earth_src := FileAccess.get_file_as_string("res://scripts/earth_controller.gd")
+	check("earth REQ-25: earth_controller.gd computes no Sun direction (no sun_dir or subsolar use)",
+		not earth_src.contains("sun_dir") and not earth_src.contains("subsolar"))
+	var utcs := ["2026-01-31T23:59:59Z", "2026-02-01T00:00:00Z", "2026-02-20T08:00:00Z"]
+	for m in range(1, 13):
+		utcs.append("2026-%02d-15T12:00:00Z" % m)
+	var sig_jan := []
+	var jan31_tex: Texture2D = null
+	var feb1_tex: Texture2D = null
+	for utc in utcs:
+		var dd := sample()
+		dd["utc"] = utc
+		sun.apply_line(sun_script.parse_line(line_from(dd)))
+		var month: int = utc.substr(5, 2).to_int()
+		var tex := mat.albedo_texture
+		check("earth REQ-17: %s shows the month %d image" % [utc, month], ec.month == month and tex != null, str(ec.month))
+		if tex != null:
+			var expect := _earth_sig(Image.load_from_file(EARTH_DIR + EARTH_FILES[month - 1]))
+			check("earth REQ-17: %s texture equals the %d image on the sample grid (no blend)" % [utc, month],
+				_earth_sig(tex.get_image()) == expect)
+			if month == 1 and sig_jan.is_empty():
+				sig_jan = expect
+			if month == 7:
+				check("earth REQ-17: July image differs from January on the sample grid", expect != sig_jan)
+		if utc == "2026-01-31T23:59:59Z":
+			jan31_tex = tex
+		if utc == "2026-02-01T00:00:00Z":
+			check("earth REQ-17: Feb 1 00:00 line switches to a new texture instance at the month boundary",
+				tex != jan31_tex)
+			feb1_tex = tex
+		if utc == "2026-02-20T08:00:00Z":
+			check("earth REQ-17: a second line in the same month keeps the same texture instance", tex == feb1_tex)
+	var tex_now := mat.albedo_texture
+	check("earth REQ-12: loaded monthly texture has mipmaps and is 5400 x 2700",
+		tex_now != null and tex_now.get_image().has_mipmaps() and tex_now.get_width() == 5400
+		and tex_now.get_height() == 2700)
+
+	free_main(main)
+
+	# REQ-14 / REQ-15 / REQ-16 / REQ-24: documents and build files.
+	var mk := FileAccess.get_file_as_string("res://Makefile")
+	check("earth REQ-14: Makefile defines earth-texture with the NASA bmng-base URL",
+		mk.contains("\nearth-texture:") and mk.contains("assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base"))
+	var run_rule := ""
+	for line in mk.split("\n"):
+		if line.begins_with("run:"):
+			run_rule = line
+	check("earth REQ-14: make run does not depend on earth-texture (no download on run)",
+		run_rule != "" and not run_rule.contains("earth-texture"), run_rule)
+	check("earth REQ-14: make run prints the instruction when textures are missing",
+		mk.contains("Earth textures missing: run 'make earth-texture'"))
+	var gi := FileAccess.get_file_as_string("res://.gitignore")
+	check("earth REQ-15: .gitignore lists assets/earth/bmng/", gi.contains("assets/earth/bmng/"))
+	var ds := FileAccess.get_file_as_string("res://docs/DATA_SOURCES.md")
+	var sec_at := ds.find("## Earth surface textures (Earth Milestone 1)")
+	var sec := ds.substr(sec_at) if sec_at >= 0 else ""
+	check("earth REQ-16: DATA_SOURCES has the Earth Milestone 1 texture section", sec_at >= 0)
+	var missing := []
+	for i in 12:
+		for s in [EARTH_FILES[i], EARTH_SHA256[i], str(EARTH_BYTES[i]), "bmng-base/"]:
+			if not sec.contains(s):
+				missing.append(s)
+	check("earth REQ-16: each of the 12 files lists its name, bytes, SHA-256 and download URL", missing.is_empty(), str(missing.slice(0, 3)))
+	check("earth REQ-16: required credit line recorded exactly", sec.contains(
+		"Earth imagery: Blue Marble: Next Generation, NASA Earth Observatory, NASA Goddard Space Flight Center. Produced by Reto Stöckli. https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/"))
+	check("earth REQ-16: licence quotes from the NASA FAQ and the BMNG Credits recorded",
+		sec.contains("freely available for re-publication or re-use, including commercial purposes")
+		and sec.contains("NASA Earth Observatory.") and sec.contains("May I reuse imagery that is on your site?")
+		and sec.contains("Credits") and sec.contains("2026-11-11"))
+	check("earth REQ-16: processing stated and the override of docs/earth-sky.md sections 3 and 14 recorded",
+		sec.contains("### Processing") and sec.contains("### Override") and sec.contains("docs/earth-sky.md")
+		and sec.contains("sections 3 and 14"))
+	var arch := FileAccess.get_file_as_string("res://docs/ARCHITECTURE.md")
+	check("earth REQ-24: ARCHITECTURE.md describes EarthRoot, its children and the helper-to-Earth data path",
+		arch.contains("EarthRoot") and arch.contains("EarthSurface") and arch.contains("EarthController")
+		and arch.contains("--stream") and arch.contains("earth_pos_godot"))

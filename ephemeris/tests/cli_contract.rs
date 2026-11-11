@@ -211,8 +211,9 @@ fn req_10_library_functions_return_intermediate_values() {
 const HORIZONS_2026_LON: f64 = 175.405935;
 const HORIZONS_2026_LAT: f64 = -1.544939;
 
+// Fixed-time reference check (REQ-13, Rev. 4): explicit time, not the default time.
 #[test]
-fn req_13_cli_subsolar_point_within_half_degree_of_horizons() {
+fn req_13_reference_check_cli_subsolar_point_within_half_degree_of_horizons() {
     let out = run_cli(&["2026-11-10T00:00:00Z"]);
     let text = stdout_of(&out);
     let sep = great_circle_deg(
@@ -247,16 +248,29 @@ fn req_13_readme_records_cli_horizons_values_and_query_settings() {
 // ---------------------------------------------------------------- REQ-14
 
 #[test]
-fn req_14_committed_ephemeris_file_has_default_date_and_matches_cli() {
+fn req_14_committed_ephemeris_file_has_valid_utc_and_matches_cli() {
+    // The file holds whatever time it was last generated for, so its utc is not fixed.
+    // Deterministic check: the utc is a valid time and the file equals the CLI output for that utc.
     let path = crate_dir().join("../assets/ephemeris/sun_moon_fixed.json");
     let committed = std::fs::read_to_string(&path).expect("committed ephemeris JSON");
-    assert_eq!(string_field(&committed, "utc"), "2026-11-10T00:00:00Z", "REQ-14: default date");
-    let cli = stdout_of(&run_cli(&[]));
+    let utc = string_field(&committed, "utc");
+    assert!(UtcTime::parse(&utc).is_ok(), "REQ-14: committed utc {utc} is a valid time");
+    let out = run_cli(&[utc.as_str()]);
+    assert!(out.status.success(), "REQ-14: CLI accepts the committed utc {utc}");
+    let cli = stdout_of(&out);
     for f in FIELDS {
         let a = raw_value(&committed, f);
         let b = raw_value(&cli, f);
-        assert_eq!(a, b, "REQ-14: committed field {f} equals CLI output for the default date");
+        assert_eq!(a, b, "REQ-14: committed field {f} equals CLI output for the committed utc {utc}");
     }
+}
+
+#[test]
+fn req_14_explicit_override_time_is_written_and_matches_cli() {
+    // Explicit-override check: the CLI with the fixed reference time echoes that time.
+    let out = run_cli(&["2026-11-10T00:00:00Z"]);
+    assert!(out.status.success(), "REQ-14: explicit time accepted");
+    assert_eq!(string_field(&stdout_of(&out), "utc"), "2026-11-10T00:00:00Z", "REQ-14: explicit utc echoed");
 }
 
 // ---------------------------------------------------------------- REQ-22

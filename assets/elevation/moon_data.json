@@ -1,0 +1,186 @@
+{
+  "generator": {
+    "crate": "moon-data",
+    "version": "0.1.0",
+    "rust_toolchain": "1.90.0"
+  },
+  "grid_convention": "equirectangular, cell-centred: column x centre at longitude 360*(x+0.5)/W deg E, row y centre at latitude 90-180*(y+0.5)/H deg; row 0 is the northernmost row, column 0 starts at 0 deg E",
+  "reference_radius_m": 1737400.0,
+  "sources": {
+    "elevation": {
+      "product": "LRO LOLA GDR LDEM_64",
+      "product_id": "LDEM_64",
+      "product_version_id": "V3.1",
+      "data_set_id": "LRO-L-LOLA-4-GDR-V1.0",
+      "samples": 23040,
+      "lines": 11520,
+      "pixels_per_degree": 64.0,
+      "projection": "SIMPLE CYLINDRICAL",
+      "coordinate_system": "MEAN EARTH/POLAR AXIS OF DE421",
+      "scaling_factor_m_per_dn": 0.5,
+      "offset_m": 1737400.0,
+      "missing_constant": null,
+      "files": [
+        {
+          "path": "data/raw/lola_ldem_64/LDEM_64.LBL",
+          "sha256": "4e7a94c76c716a147b21ccf07669d004246b0d1b017b7d63d50befaa1a34142d"
+        },
+        {
+          "path": "data/raw/lola_ldem_64/LDEM_64.IMG",
+          "sha256": "1c4958699d4cffd7e777d51421b6044bba300aa0bef286a544309efb082cdbd6"
+        }
+      ]
+    },
+    "albedo": {
+      "product": "LROC WAC Global Morphologic Mosaic (WAC_GLOBAL), 100 m/pixel",
+      "files": [
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300N0450_100M.TIF",
+          "sha256": "7628283ecf8fd7f458c2b7ddaa608c81131671ca9536793020bbb05c06555bdf"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300N1350_100M.TIF",
+          "sha256": "278b11a148753466b1d50c48d6b6cea43418dbd4172552c9a3977d032b74c2e1"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300N2250_100M.TIF",
+          "sha256": "5ee3c6a66134fddbb80c5e34925ff54aa29f2543fa7bde4f62a02e14d3a98941"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300N3150_100M.TIF",
+          "sha256": "20e2160c4837ed0e97ab540e08e8b770d33d0309bb32e836b28502dcbf2c7c6f"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300S0450_100M.TIF",
+          "sha256": "132db1800f6572cdb8c1dff225856df3f0a3d3c5bd3cae475624cc92775068a0"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300S1350_100M.TIF",
+          "sha256": "6f81bd2f64587a5217f8ad9765256b341c773196ce165f9011f34f6e80814eaa"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300S2250_100M.TIF",
+          "sha256": "7fbd10527e29a5860772fc71b27b1a98a21f14b741f32622ef230246a73eefbb"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_E300S3150_100M.TIF",
+          "sha256": "2353c356c1e3a7b70661240f3b417a6eeb60630c729fa4d3d0d4574f4bb8fb39"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_P900N0000_100M.TIF",
+          "sha256": "93254c705f9bbd53dd41bb680045f42814f5cd3f4a6f5ad6704529154307006c"
+        },
+        {
+          "path": "data/raw/lroc_wac_gmm_100m/WAC_GLOBAL_P900S0000_100M.TIF",
+          "sha256": "cf835f350046bba7bf8b5d856bd02a3d671cf7a39b0b8a848d51a4c2b3b0a101"
+        }
+      ]
+    }
+  },
+  "elevation_levels": [
+    {
+      "path": "assets/elevation/lola_height_m_4096x2048.f32",
+      "width": 4096,
+      "height": 2048,
+      "data_type": "float32",
+      "byte_order": "little-endian",
+      "units": "m",
+      "quantity": "height above the reference sphere",
+      "grid_convention": "equirectangular, cell-centred: column x centre at longitude 360*(x+0.5)/W deg E, row y centre at latitude 90-180*(y+0.5)/H deg; row 0 is the northernmost row, column 0 starts at 0 deg E",
+      "extent": {
+        "lon_west_deg": 0.0,
+        "lon_east_deg": 360.0,
+        "lat_north_deg": 90.0,
+        "lat_south_deg": -90.0
+      },
+      "reference_radius_m": 1737400.0,
+      "min": -9063.0556640625,
+      "max": 10662.06640625,
+      "mean": -519.4276773935959,
+      "nodata_value": "NaN",
+      "nodata_count": 0,
+      "sha256": "88d4c5b5269e1a6a5d67fa735caf86c37f70b2eec3b4e5f6c62335f63e6b8512"
+    },
+    {
+      "path": "assets/elevation/lola_height_m_2048x1024.f32",
+      "width": 2048,
+      "height": 1024,
+      "data_type": "float32",
+      "byte_order": "little-endian",
+      "units": "m",
+      "quantity": "height above the reference sphere",
+      "grid_convention": "equirectangular, cell-centred: column x centre at longitude 360*(x+0.5)/W deg E, row y centre at latitude 90-180*(y+0.5)/H deg; row 0 is the northernmost row, column 0 starts at 0 deg E",
+      "extent": {
+        "lon_west_deg": 0.0,
+        "lon_east_deg": 360.0,
+        "lat_north_deg": 90.0,
+        "lat_south_deg": -90.0
+      },
+      "reference_radius_m": 1737400.0,
+      "min": -8817.11328125,
+      "max": 10575.0498046875,
+      "mean": -519.371729655857,
+      "nodata_value": "NaN",
+      "nodata_count": 0,
+      "sha256": "97c6854f2a50a0e948fe9d650979a7c82d4122e4528fa73dcac501b42316eabd"
+    },
+    {
+      "path": "assets/elevation/lola_height_m_1024x512.f32",
+      "width": 1024,
+      "height": 512,
+      "data_type": "float32",
+      "byte_order": "little-endian",
+      "units": "m",
+      "quantity": "height above the reference sphere",
+      "grid_convention": "equirectangular, cell-centred: column x centre at longitude 360*(x+0.5)/W deg E, row y centre at latitude 90-180*(y+0.5)/H deg; row 0 is the northernmost row, column 0 starts at 0 deg E",
+      "extent": {
+        "lon_west_deg": 0.0,
+        "lon_east_deg": 360.0,
+        "lat_north_deg": 90.0,
+        "lat_south_deg": -90.0
+      },
+      "reference_radius_m": 1737400.0,
+      "min": -8472.1123046875,
+      "max": 9993.203125,
+      "mean": -519.4233874017186,
+      "nodata_value": "NaN",
+      "nodata_count": 0,
+      "sha256": "30e836e84bec102bca88d07e258c13307a511a4d282e65b62c6e99b421323a04"
+    }
+  ],
+  "albedo": {
+    "path": "assets/textures/lunar_albedo_4096x2048.png",
+    "width": 4096,
+    "height": 2048,
+    "data_type": "uint8 RGB PNG (R = G = B)",
+    "byte_order": "not applicable (8-bit samples)",
+    "units": "8-bit grey level of the source mosaic",
+    "grid_convention": "equirectangular, cell-centred: column x centre at longitude 360*(x+0.5)/W deg E, row y centre at latitude 90-180*(y+0.5)/H deg; row 0 is the northernmost row, column 0 starts at 0 deg E",
+    "extent": {
+      "lon_west_deg": 0.0,
+      "lon_east_deg": 360.0,
+      "lat_north_deg": 90.0,
+      "lat_south_deg": -90.0
+    },
+    "reference_radius_m": 1737400.0,
+    "min": 0.0,
+    "max": 254.0,
+    "mean": 64.29956471920013,
+    "nodata_value": null,
+    "nodata_count": 0,
+    "sha256": "fa62317f9fa40e87a23260adcbd32bf4b1d26e3ca900b0adf6c04d0acba19043"
+  },
+  "normal_map": {
+    "path": "assets/textures/lunar_normal_enu_4096x2048.png",
+    "width": 4096,
+    "height": 2048,
+    "encoding": "enu_rgb8",
+    "frame": "local east-north-up at the texel centre; R,G,B = round((n*0.5+0.5)*255) for east, north, up",
+    "source_level": {
+      "path": "assets/elevation/lola_height_m_4096x2048.f32",
+      "sha256": "88d4c5b5269e1a6a5d67fa735caf86c37f70b2eec3b4e5f6c62335f63e6b8512"
+    },
+    "method": "central difference, k rule",
+    "sha256": "bedaa5676e425a3a8b503ffd407b56ef0ea1aa4c1f501fd9b750403aad7f2f7f"
+  }
+}

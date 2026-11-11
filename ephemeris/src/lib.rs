@@ -62,6 +62,22 @@ fn days_in_month(y: i32, m: u32) -> u32 {
 }
 
 impl UtcTime {
+    /// UTC time for whole seconds since the Unix epoch (civil-from-days, H. Hinnant).
+    pub fn from_unix(secs: u64) -> UtcTime {
+        let days = (secs / 86400) as i64;
+        let sod = (secs % 86400) as u32;
+        let z = days + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+        let year = (yoe + era * 400 + i64::from(month <= 2)) as i32;
+        UtcTime { year, month, day, hour: sod / 3600, minute: sod / 60 % 60, second: sod % 60 }
+    }
+
     /// Parses `YYYY-MM-DDTHH:MM:SSZ`, years 1900 to 2100.
     pub fn parse(s: &str) -> Result<UtcTime, String> {
         let b = s.as_bytes();
@@ -351,14 +367,24 @@ impl SunFromMoon {
     }
 }
 
-/// Moon-to-Sun vector in ICRF/J2000 (km) for a TT Julian Date.
-pub fn moon_to_sun_j2000_km(jd_tt: f64) -> Vec3 {
-    let sun = sun_of_date(jd_tt);
-    let sun_ecl = spherical(sun.lambda, 0.0, sun.r_au * AU_KM);
-    let sun_eq = ecliptic_of_date_to_j2000(&sun_ecl, sun.eps, jd_tt);
+/// Geocentric Moon vector (Earth centre -> Moon centre) in ICRF/J2000, km, for a TT Julian Date.
+pub fn geocentric_moon_j2000_km(jd_tt: f64) -> Vec3 {
     let (ml, mb, md) = moon_ecliptic(jd_tt);
     let moon_ecl = spherical(ml, mb, md);
-    let moon_eq = ecliptic_of_date_to_j2000(&moon_ecl, mean_obliquity_deg(jd_tt), jd_tt);
+    ecliptic_of_date_to_j2000(&moon_ecl, mean_obliquity_deg(jd_tt), jd_tt)
+}
+
+/// Geocentric Sun vector (Earth centre -> Sun centre) in ICRF/J2000, km.
+fn geocentric_sun_j2000_km(jd_tt: f64) -> Vec3 {
+    let sun = sun_of_date(jd_tt);
+    let sun_ecl = spherical(sun.lambda, 0.0, sun.r_au * AU_KM);
+    ecliptic_of_date_to_j2000(&sun_ecl, sun.eps, jd_tt)
+}
+
+/// Moon-to-Sun vector in ICRF/J2000 (km) for a TT Julian Date.
+pub fn moon_to_sun_j2000_km(jd_tt: f64) -> Vec3 {
+    let sun_eq = geocentric_sun_j2000_km(jd_tt);
+    let moon_eq = geocentric_moon_j2000_km(jd_tt);
     [
         sun_eq[0] - moon_eq[0],
         sun_eq[1] - moon_eq[1],
@@ -389,11 +415,82 @@ pub fn sun_from_moon(utc: &UtcTime) -> SunFromMoon {
     sun_from_moon_jd_tt(utc.jd_tt())
 }
 
+/// Earth Rotation Angle (IAU 2000) in radians for a UT1 Julian Date (UT1 = UTC here).
+pub fn earth_rotation_angle_rad(jd_ut1: f64) -> f64 {
+    let turns = 0.7790572732640 + 1.00273781191135448 * (jd_ut1 - J2000);
+    2.0 * PI * turns.rem_euclid(1.0)
+}
+
+/// Earth as seen from the Moon: position, orientation and Sun direction at Earth.
+#[derive(Debug, Clone, Copy)]
+pub struct EarthFromMoon {
+    /// Moon centre -> Earth centre, km, Godot mapping of the Moon-fixed frame.
+    pub pos_godot: Vec3,
+    pub distance_km: f64,
+    /// Row-major rotation matrix, Earth-fixed -> Godot.
+    pub basis_godot: [f64; 9],
+    /// Unit vector Earth centre -> Sun centre, Godot mapping.
+    pub sun_dir_godot: Vec3,
+    pub subsolar_lon_deg: f64,
+    pub subsolar_lat_deg: f64,
+}
+
+fn to_godot(v: &Vec3) -> Vec3 {
+    [v[1], v[2], v[0]]
+}
+
+/// Earth data for a UTC time. Pole fixed along ICRF +z, prime meridian angle = ERA.
+pub fn earth_from_moon(utc: &UtcTime) -> EarthFromMoon {
+    let jd_tt = utc.jd_tt();
+    let to_moon = icrf_to_moon_fixed(jd_tt);
+    let moon_geo = geocentric_moon_j2000_km(jd_tt);
+    let to_earth_fixed = r3(earth_rotation_angle_rad(utc.jd_utc())); // ICRF -> Earth-fixed (passive)
+    let earth_fixed_to_moon = mul(&to_moon, &transpose(&to_earth_fixed));
+    let m = |i: usize| earth_fixed_to_moon[i];
+    // Godot row X = Moon-fixed y, row Y = Moon-fixed z, row Z = Moon-fixed x.
+    let rows = [m(1), m(2), m(0)];
+    let basis_godot = [
+        rows[0][0], rows[0][1], rows[0][2], rows[1][0], rows[1][1], rows[1][2], rows[2][0],
+        rows[2][1], rows[2][2],
+    ];
+    let earth_moon_fixed = apply(&to_moon, &[-moon_geo[0], -moon_geo[1], -moon_geo[2]]);
+    let pos_godot = to_godot(&earth_moon_fixed);
+    let moon_to_sun = moon_to_sun_j2000_km(jd_tt);
+    let toward_sun = [
+        moon_to_sun[0] + moon_geo[0],
+        moon_to_sun[1] + moon_geo[1],
+        moon_to_sun[2] + moon_geo[2],
+    ];
+    let len = (toward_sun[0].powi(2) + toward_sun[1].powi(2) + toward_sun[2].powi(2)).sqrt();
+    let sun_ef = apply(&to_earth_fixed, &toward_sun);
+    let lat = deg((sun_ef[2] / len).asin());
+    let mut lon = deg(sun_ef[1].atan2(sun_ef[0]));
+    if lon <= -180.0 {
+        lon += 360.0;
+    }
+    let local = spherical(lon, lat, 1.0);
+    let sun_dir_godot = [
+        basis_godot[0] * local[0] + basis_godot[1] * local[1] + basis_godot[2] * local[2],
+        basis_godot[3] * local[0] + basis_godot[4] * local[1] + basis_godot[5] * local[2],
+        basis_godot[6] * local[0] + basis_godot[7] * local[1] + basis_godot[8] * local[2],
+    ];
+    EarthFromMoon {
+        pos_godot,
+        distance_km: (pos_godot[0].powi(2) + pos_godot[1].powi(2) + pos_godot[2].powi(2)).sqrt(),
+        basis_godot,
+        sun_dir_godot,
+        subsolar_lon_deg: lon,
+        subsolar_lat_deg: lat,
+    }
+}
+
 /// JSON object written by the CLI.
 pub fn to_json(utc: &UtcTime, s: &SunFromMoon) -> String {
     let v = |a: Vec3| format!("[{}, {}, {}]", a[0], a[1], a[2]);
+    let e = earth_from_moon(utc);
+    let b = e.basis_godot.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ");
     format!(
-        "{{\n  \"utc\": \"{}\",\n  \"jd_tt\": {},\n  \"frame\": \"IAU_MOON\",\n  \"sun_dir_moon_fixed\": {},\n  \"sun_dir_godot\": {},\n  \"subsolar_lon_deg\": {},\n  \"subsolar_lat_deg\": {},\n  \"sun_distance_km\": {},\n  \"sun_angular_diameter_deg\": {}\n}}",
+        "{{\n  \"utc\": \"{}\",\n  \"jd_tt\": {},\n  \"frame\": \"IAU_MOON\",\n  \"sun_dir_moon_fixed\": {},\n  \"sun_dir_godot\": {},\n  \"subsolar_lon_deg\": {},\n  \"subsolar_lat_deg\": {},\n  \"sun_distance_km\": {},\n  \"sun_angular_diameter_deg\": {},\n  \"earth_pos_godot\": {},\n  \"earth_distance_km\": {},\n  \"earth_basis_godot\": [{}],\n  \"earth_sun_dir_godot\": {},\n  \"earth_subsolar_lon_deg\": {},\n  \"earth_subsolar_lat_deg\": {}\n}}",
         utc.to_iso(),
         s.jd_tt,
         v(s.dir_moon_fixed),
@@ -401,6 +498,12 @@ pub fn to_json(utc: &UtcTime, s: &SunFromMoon) -> String {
         s.subsolar_lon_deg,
         s.subsolar_lat_deg,
         s.distance_km,
-        s.angular_diameter_deg
+        s.angular_diameter_deg,
+        v(e.pos_godot),
+        e.distance_km,
+        b,
+        v(e.sun_dir_godot),
+        e.subsolar_lon_deg,
+        e.subsolar_lat_deg
     )
 }

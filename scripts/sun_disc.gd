@@ -36,6 +36,9 @@ func _process(_delta: float) -> void:
 
 ## Places and scales the disc from the current camera position and Sun direction.
 func update_disc() -> void:
+	visible = _sun.has_sun
+	if not visible:
+		return
 	radius = DISC_DISTANCE * SUN_RADIUS_KM / _sun.sun_distance_km
 	var d: Vector3 = _sun.sun_direction()
 	var cam_pos := _camera.global_position

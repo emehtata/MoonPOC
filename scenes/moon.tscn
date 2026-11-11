@@ -1,13 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/moon.gd" id="1_moon"]
 
-[sub_resource type="SphereMesh" id="SphereMesh_moon"]
-radius = 1737.4
-height = 3474.8
-radial_segments = 512
-rings = 256
-
-[node name="Moon" type="MeshInstance3D"]
-mesh = SubResource("SphereMesh_moon")
+[node name="Moon" type="Node3D"]
 script = ExtResource("1_moon")

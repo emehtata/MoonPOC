@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/moon.tscn" id="1_moon"]
 [ext_resource type="Script" path="res://scripts/moon_camera.gd" id="2_camera"]
 [ext_resource type="Script" path="res://scripts/sun_controller.gd" id="3_sun"]
 
 [ext_resource type="Script" path="res://scripts/sun_disc.gd" id="4_disc"]
+[ext_resource type="Script" path="res://scripts/earth_controller.gd" id="5_earth"]
 
 [sub_resource type="Environment" id="Environment_space"]
 background_mode = 1
@@ -13,9 +14,31 @@ ambient_light_source = 1
 fog_enabled = false
 glow_enabled = false
 
+[sub_resource type="SphereMesh" id="SphereMesh_earth"]
+radius = 6371.0
+height = 12742.0
+radial_segments = 128
+rings = 64
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_earth"]
+texture_filter = 5
+roughness = 1.0
+
 [node name="Main" type="Node3D"]
 
 [node name="Moon" parent="." instance=ExtResource("1_moon")]
+
+[node name="EarthRoot" type="Node3D" parent="."]
+visible = false
+
+[node name="EarthSurface" type="MeshInstance3D" parent="EarthRoot"]
+transform = Transform3D(0, 0, -1, -1, 0, 0, 0, 1, 0, 0, 0, 0)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_earth")
+surface_material_override/0 = SubResource("StandardMaterial3D_earth")
+
+[node name="EarthController" type="Node" parent="EarthRoot"]
+script = ExtResource("5_earth")
 
 [node name="CameraRig" type="Node3D" parent="."]
 script = ExtResource("2_camera")
@@ -23,10 +46,16 @@ script = ExtResource("2_camera")
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 current = true
 near = 0.01
-far = 100000.0
+far = 440000.0
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
 shadow_enabled = true
+light_angular_distance = 0.0
+directional_shadow_mode = 2
+directional_shadow_split_1 = 0.1
+directional_shadow_split_2 = 0.2
+directional_shadow_split_3 = 0.5
+directional_shadow_blend_splits = true
 script = ExtResource("3_sun")
 
 [node name="SunDisc" type="MeshInstance3D" parent="."]

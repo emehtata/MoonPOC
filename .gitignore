@@ -13,3 +13,9 @@ tools/texture-prep/target/
 
 # Cargo build output of the Milestone 2 moon-data tool
 tools/moon-data/target/
+
+# Earth Milestone 1: monthly Blue Marble images, downloaded by `make earth-texture` (see docs/DATA_SOURCES.md)
+assets/earth/bmng/
+
+# Cargo build output of the Moon data pipeline
+tools/moon-data/target/
