@@ -35,3 +35,10 @@ BUILD: <command> → pass | fail (with the relevant error lines)
 STACK_CHOICE: <only when you chose the stack>
 NOTES: <deviations, blockers with REQ id, or none>
 ```
+
+## Working style (ponytail, full level)
+Work as a lazy senior developer: the smallest complete change, reuse what the codebase already has, no speculative features or abstractions. New non-trivial logic gets one small check. Name any shortcut in a code comment as `shortcut: <limit>, <when to upgrade>`. End your final report with one or two lines: what you skipped or did not check, and any risk the user must know.
+
+
+## Visual checks
+Visual checks are run by the screenshot agent, following `.claude/skills/screenshot/SKILL.md`. Do not take or judge screenshots yourself, and do not mark a visual check as passed on your own.

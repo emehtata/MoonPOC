@@ -189,6 +189,8 @@ pub fn run(raw_dir: &Path, outputs: &Outputs) -> Result<Vec<Written>, Failure> {
     let (levels, image_sha) = convert_dem(&dem_dir.join(DEM_IMAGE), dem)?;
     let (grey, tile_shas) = convert_albedo(&tile_dir, &checked.tiles)?;
     let png = albedo::encode_rgb_png(&grey)?;
+    let ldem64_tiles =
+        crate::ldem64::write_tiles(&dem_dir.join(DEM_IMAGE), dem, &outputs.elevation_dir.join(crate::ldem64::TILE_DIR))?;
 
     let mut files: Vec<(PathBuf, Vec<u8>)> = Vec::new();
     let mut level_entries = Vec::new();
@@ -307,6 +309,7 @@ pub fn run(raw_dir: &Path, outputs: &Outputs) -> Result<Vec<Written>, Failure> {
             ]),
         ),
         ("elevation_levels", Json::Arr(level_entries)),
+        ("ldem64_tiles", ldem64_tiles),
         ("albedo", albedo_entry),
     ]);
     files.push((

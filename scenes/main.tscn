@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/moon.tscn" id="1_moon"]
 [ext_resource type="Script" path="res://scripts/moon_camera.gd" id="2_camera"]
@@ -8,6 +8,9 @@
 [ext_resource type="Script" path="res://scripts/earth_controller.gd" id="5_earth"]
 [ext_resource type="Script" path="res://scripts/cloud_layer.gd" id="6_cloud"]
 [ext_resource type="Shader" path="res://shaders/cloud.gdshader" id="7_cloudshader"]
+[ext_resource type="Script" path="res://scripts/fly_camera.gd" id="8_fly"]
+[ext_resource type="Script" path="res://scripts/near_world.gd" id="9_near"]
+[ext_resource type="Script" path="res://scripts/terrain_quadtree.gd" id="10_quad"]
 
 [sub_resource type="Environment" id="Environment_space"]
 background_mode = 1
@@ -89,6 +92,19 @@ script = ExtResource("2_camera")
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 current = true
 near = 0.05
+far = 440000.0
+
+[node name="TerrainQuadtree" type="Node3D" parent="."]
+script = ExtResource("10_quad")
+
+[node name="FlyCamera" type="Node3D" parent="."]
+script = ExtResource("8_fly")
+
+[node name="NearWorld" type="Node3D" parent="."]
+script = ExtResource("9_near")
+
+[node name="Camera3D" type="Camera3D" parent="FlyCamera"]
+near = 0.01
 far = 440000.0
 
 [node name="Sun" type="DirectionalLight3D" parent="."]

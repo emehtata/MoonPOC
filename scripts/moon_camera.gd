@@ -34,6 +34,7 @@ var _right_drag := false
 @onready var camera: Camera3D = $Camera3D
 @onready var _moon: Node3D = get_node_or_null("../Moon")
 @onready var _sun: DirectionalLight3D = get_node_or_null("../Sun")
+@onready var _fly = get_node_or_null("../FlyCamera")
 
 
 func _ready() -> void:
@@ -126,7 +127,8 @@ func _apply() -> void:
 	# REQ-11: heading about the camera-to-pivot axis, then tilt about the camera's own X axis.
 	look = look * Basis(Vector3.FORWARD, deg_to_rad(heading_deg)) * Basis(Vector3.RIGHT, deg_to_rad(tilt_deg))
 	camera.transform = Transform3D(look, offset)
-	if _sun:
+	# The fly camera sets the shadow distance and splits itself while it is active (REQ-25).
+	if _sun and not (_fly and _fly.active):
 		_sun.directional_shadow_max_distance = shadow_max_distance(camera.global_position.distance_to(_moon_centre()))
 
 

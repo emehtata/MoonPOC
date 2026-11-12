@@ -7,6 +7,7 @@
 pub mod albedo;
 pub mod dem;
 pub mod json;
+pub mod ldem64;
 pub mod normal;
 pub mod pds;
 pub mod pipeline;

@@ -17,6 +17,8 @@ const FILES := ["world.200401.3x5400x2700.jpg", "world.200402.3x5400x2700.jpg",
 
 ## Month (1..12) of the shown image, 0 before the first line.
 var month := 0
+## Offset added to streamed Earth positions (negative floating origin, km); set by the fly camera.
+var world_offset := Vector3.ZERO
 var _missing_reported := false
 
 @onready var _root: Node3D = get_parent()
@@ -33,7 +35,7 @@ func apply_line(data: Dictionary) -> void:
 	var b: Array = data["earth_basis_godot"]
 	# earth_basis_godot is row-major; Basis(x, y, z) takes columns.
 	var basis := Basis(Vector3(b[0], b[1], b[2]), Vector3(b[3], b[4], b[5]), Vector3(b[6], b[7], b[8])).transposed()
-	_root.global_transform = Transform3D(basis, Vector3(p[0], p[1], p[2]))
+	_root.global_transform = Transform3D(basis, Vector3(p[0], p[1], p[2]) + world_offset)
 	_root.visible = true
 	for layer in ["CloudLower", "CloudUpper"]:
 		get_node("../" + layer).apply_utc(data["utc"])

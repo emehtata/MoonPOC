@@ -135,6 +135,13 @@ func run_all() -> void:
 	test_cloud_sampling()
 	var cloud_ms := Time.get_ticks_msec() - cloud_t0
 	check("REQ-20: headless cloud tests finish in under 10 s (%d ms)" % cloud_ms, cloud_ms < 10000)
+	test_lunar_fly()
+	test_lunar_surface_material()
+	test_rock_albedo_factor()
+	test_phase4_shadow_splits()
+	test_req7a_sun_override()
+	test_lod_streaming()
+	test_fly_path()
 	test_repo_scan()
 	print("RESULT: %d total, %d passed, %d failed" % [_passed + _failed, _passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -626,10 +633,16 @@ func test_moon_material_and_texture() -> void:
 			(albedo as Texture2D).get_width() == 4096 and (albedo as Texture2D).get_height() == 2048,
 			"%d x %d" % [(albedo as Texture2D).get_width(), (albedo as Texture2D).get_height()])
 	var src := FileAccess.get_file_as_string(SHADER)
-	check("M3 REQ-1: albedo sampler uses source_color (sRGB) and anisotropic mipmapped linear filtering",
-		src.contains("uniform sampler2D albedo_texture : source_color, filter_linear_mipmap_anisotropic"))
-	check("M3 REQ-1: the shader writes no VERTEX (displacement stays in the mesh)",
-		not _regex_hit(src, "\\bVERTEX\\s*[-+*/]?=[^=]"))
+	check("M3 REQ-1: albedo sampler has no source_color hint (linear reflectance) and uses anisotropic mipmapped linear filtering",
+		src.contains("uniform sampler2D albedo_texture : filter_linear_mipmap_anisotropic") \
+		and not src.contains("albedo_texture : source_color"))
+	# REQ-30 replaces this rule: the only VERTEX write allowed is the geomorph line.
+	var vre := RegEx.new()
+	vre.compile("\\bVERTEX\\s*[-+*/]?=[^=][^;]*;")
+	var vwrites := vre.search_all(src)
+	check("M3 REQ-1 / REQ-30: the shader writes VERTEX only for the geomorph (one line, CUSTOM0 * morph)",
+		vwrites.size() == 1 and vwrites[0].get_string() == "VERTEX += CUSTOM0.xyz * morph;",
+		"%d VERTEX writes" % vwrites.size())
 	check("M3 REQ-3: specular disabled, metallic 0, roughness 1.0",
 		src.contains("specular_disabled") and src.contains("METALLIC = 0.0") and src.contains("ROUGHNESS = 1.0"))
 	check("M3 REQ-3: the shader writes no EMISSION, RIM or CLEARCOAT",
@@ -1611,6 +1624,468 @@ func test_docs_m2() -> void:
 
 
 # ---------------------------------------------------------------- repo scan (REQ-23)
+
+# ---------------------------------------------------------------- lunar surface fly camera (REQ-5, REQ-6)
+
+func tf_near(a: Transform3D, b: Transform3D, tol: float) -> bool:
+	if a.origin.distance_to(b.origin) > tol:
+		return false
+	for i in 3:
+		if a.basis[i].distance_to(b.basis[i]) > tol:
+			return false
+	return true
+
+
+func test_lunar_fly() -> void:
+	var main := spawn_main()
+	var fly = main.get_node("FlyCamera")
+	var orbit := main.get_node("CameraRig/Camera3D") as Camera3D
+	var fly_cam: Camera3D = fly.camera
+	var near_cam: Camera3D = fly.near_camera
+	var near_vp: SubViewport = fly.near_viewport
+
+	# REQ-6: structure, checked before fly mode is entered.
+	check("REQ-6: near SubViewport has a transparent background", near_vp.transparent_bg)
+	check("REQ-6: near SubViewport shares the main World3D",
+		near_vp.world_3d == main.get_viewport().world_3d)
+	check("REQ-6: near camera has near 1e-6 km and far 20 km",
+		near(near_cam.near, 1e-6, 1e-12) and near(near_cam.far, 20.0, 1e-9),
+		"near %s far %s" % [near_cam.near, near_cam.far])
+	# Spec D9 / REQ-6 (Rev. 7): mask 3 = layer 1 + layer 2 (terrain alone renders black under the Sun).
+	check("REQ-6: near camera cull mask is 3 (terrain layer 2 plus layer 1, spec D9 rev 7)",
+		near_cam.cull_mask == 3, "cull_mask %d" % near_cam.cull_mask)
+	check("REQ-6: far camera has near 0.05 km and far 440000 km",
+		near(fly_cam.near, 0.05, 1e-9) and near(fly_cam.far, 440000.0, 1e-6),
+		"near %s far %s" % [fly_cam.near, fly_cam.far])
+	check("REQ-6: far camera draws all layers", fly_cam.cull_mask == (1 << 20) - 1,
+		"cull_mask %d" % fly_cam.cull_mask)
+	check("REQ-6: orbit camera keeps near 0.05 and far 440000",
+		near(orbit.near, 0.05, 1e-9) and near(orbit.far, 440000.0, 1e-6),
+		"near %s far %s" % [orbit.near, orbit.far])
+
+	# REQ-6 and REQ-5: switching. Fly mode is entered by the same call the F key handler makes.
+	var orbit_t: Transform3D = orbit.global_transform
+	check("REQ-6: orbit mode at start: orbit camera current, overlay hidden, near viewport not rendering",
+		orbit.current and not fly_cam.current and not fly.active and not fly._overlay.visible
+		and near_vp.render_target_update_mode == SubViewport.UPDATE_DISABLED)
+	fly.set_active(not fly.active)
+	check("REQ-5: lunar terrain library and data load for fly mode", fly.terrain != null,
+		"fly mode stays disabled without the native terrain")
+	if fly.terrain == null:
+		free_main(main)
+		return
+	fly._process(0.0)
+	check("REQ-6: F enters fly mode: fly camera current, orbit camera not, overlay shown, near viewport rendering",
+		fly.active and fly_cam.current and not orbit.current and fly._overlay.visible
+		and near_cam.current and near_vp.render_target_update_mode == SubViewport.UPDATE_ALWAYS)
+	var first_pos_err: float = (fly_cam.global_position - orbit_t.origin).length()
+	var first_view_err: float = (-fly_cam.global_basis.z).angle_to(-orbit_t.basis.z)
+	check("REQ-6: first fly frame has the orbit camera's position (within 1e-4 km)",
+		first_pos_err <= 1e-4, "error %s km, fly %s orbit %s" % [first_pos_err, fly_cam.global_position, orbit_t.origin])
+	# Spec REQ-6 (Rev. 7): view may differ by at most 1 deg (the +-89 deg pitch cap). Angle in radians.
+	check("REQ-6: first fly frame has the orbit camera's view direction (within 1 deg, 0.01745 rad, spec rev 7)",
+		first_view_err <= deg_to_rad(1.0), "error %s rad" % first_view_err)
+	check("REQ-6: near and far cameras share the global transform and the vertical FOV",
+		tf_near(near_cam.global_transform, fly_cam.global_transform, 1e-9) and near_cam.fov == fly_cam.fov,
+		"fov %s / %s" % [near_cam.fov, fly_cam.fov])
+	fly.advance(0.5, Vector3(1, 0, 1))
+	fly._process(0.0)
+	check("REQ-6: near and far cameras share the global transform after moving",
+		tf_near(near_cam.global_transform, fly_cam.global_transform, 1e-9))
+	fly.set_active(not fly.active)
+	check("REQ-6: leaving fly mode restores the orbit camera current and the fly camera not current",
+		orbit.current and not fly_cam.current and not fly.active)
+	check("REQ-6: leaving fly mode hides the overlay", not fly._overlay.visible)
+	check("REQ-6: leaving fly mode stops the near viewport from rendering",
+		not near_cam.current and near_vp.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"near camera current %s, update mode %s" % [near_cam.current, near_vp.render_target_update_mode])
+	check("REQ-6: leaving fly mode keeps the orbit camera's transform from entry",
+		tf_near(orbit.global_transform, orbit_t, 1e-6))
+
+	# REQ-5: controls, using the functions and handlers in fly_camera.gd.
+	fly.set_active(true)
+	fly.speed_scale = 1.0
+	fly.place_at(0.0, 0.0, 100.0)
+	fly.yaw_deg = 0.0
+	fly.pitch_deg = 0.0
+	fly._unhandled_input(mouse_motion(Vector2(100, -50)))
+	check("REQ-5: mouse look is 0.2 deg per px: 100 px right gives +20 yaw, 50 px up gives +10 pitch",
+		near(fly.yaw_deg, 20.0, 1e-6) and near(fly.pitch_deg, 10.0, 1e-6),
+		"yaw %s pitch %s" % [fly.yaw_deg, fly.pitch_deg])
+	fly._unhandled_input(mouse_motion(Vector2(0, -10000)))
+	check("REQ-5: pitch is limited to +89 degrees", near(fly.pitch_deg, 89.0, 1e-9), str(fly.pitch_deg))
+	fly._unhandled_input(mouse_motion(Vector2(0, 100000)))
+	check("REQ-5: pitch is limited to -89 degrees", near(fly.pitch_deg, -89.0, 1e-9), str(fly.pitch_deg))
+
+	# speed = clamp(2 x height above ground, 0.05 m/s, 2000 m/s), in m/s.
+	var speed_cases := [[0.5, 1.0], [100.0, 200.0], [5000.0, 2000.0], [0.0, 0.1]]
+	for c in speed_cases:
+		fly.place_at(0.0, 0.0, c[0])
+		check("REQ-5: speed at %s m above ground is %s m/s (got %.4f)" % [c[0], c[1], fly.speed_ms()],
+			near(fly.speed_ms(), c[1], 1e-3), str(fly.speed_ms()))
+	# 5 cm floor: the camera is never closer than 5 cm to the generated surface.
+	fly.place_at(0.0, 0.0, 0.0)
+	check("REQ-5: camera stays at least 5 cm above the generated surface",
+		fly.height_above_ground_km() >= 0.05 / 1000.0 - 1e-9, "height %s km" % fly.height_above_ground_km())
+
+	# Movement: at 0.5 m the speed is 1 m/s, so one second straight up moves 1 m.
+	fly.place_at(0.0, 0.0, 0.5)
+	# Differences are taken in doubles: Vector3 is float32, about 0.1 m at 1737 km.
+	var px0: float = fly.px
+	var py0: float = fly.py
+	var pz0: float = fly.pz
+	fly.advance(1.0, Vector3(0, 1, 0))
+	var dx: float = fly.px - px0
+	var dy: float = fly.py - py0
+	var dz: float = fly.pz - pz0
+	var moved: float = sqrt(dx * dx + dy * dy + dz * dz)
+	check("REQ-5: moving for 1 s at 1 m/s covers 1 m (0.001 km), got %s km" % moved,
+		near(moved, 0.001, 1e-7), str(moved))
+
+	# Wheel: x1.25 per notch up, x0.8 per notch down, applied to the speed.
+	fly.place_at(0.0, 0.0, 100.0)
+	fly._unhandled_input(mouse_button(MOUSE_BUTTON_WHEEL_UP, true))
+	check("REQ-5: wheel up multiplies the speed scale by 1.25", near(fly.speed_scale, 1.25, 1e-9), str(fly.speed_scale))
+	check("REQ-5: wheel up gives 250 m/s at 100 m above ground", near(fly.speed_ms(), 250.0, 1e-3), str(fly.speed_ms()))
+	fly._unhandled_input(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	fly._unhandled_input(mouse_button(MOUSE_BUTTON_WHEEL_DOWN, true))
+	check("REQ-5: two wheel-down notches from 1.25 multiply the speed scale by 0.8 each (gives 0.8)",
+		near(fly.speed_scale, 1.25 * 0.8 * 0.8, 1e-9), str(fly.speed_scale))
+
+	fly.set_active(false)
+	free_main(main)
+
+
+# ---------------------------------------------------------------- lunar surface phase 4 (REQ-21 to REQ-25, REQ-7a)
+# Shader rows are source inspection, as the spec's acceptance table says. Image checks are not here (screenshot agent).
+const LUNAR_SHADER := "res://shaders/lunar_surface.gdshader"
+const ROCK_SHADER := "res://shaders/lunar_rock.gdshader"
+const NEAR_WORLD := "res://scripts/near_world.gd"
+
+
+func _smoothstep(e0: float, e1: float, x: float) -> float:
+	var t := clampf((x - e0) / (e1 - e0), 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
+
+
+func test_lunar_surface_material() -> void:
+	# REQ-21: Lommel-Seeliger light, no specular, no ambient, no emission, in both the regolith and the rock shader.
+	for path: String in [LUNAR_SHADER, ROCK_SHADER]:
+		var src := FileAccess.get_file_as_string(path)
+		var nm: String = path.get_file()
+		check("REQ-21: %s disables specular and ambient light in render_mode" % nm,
+			_regex_hit(src, "render_mode[^\n]*specular_disabled") and _regex_hit(src, "render_mode[^\n]*ambient_light_disabled"))
+		check("REQ-21: %s writes no EMISSION, RIM, CLEARCOAT, SPECULAR_LIGHT or AMBIENT" % nm,
+			not _regex_hit(src, "\\b(EMISSION|RIM|CLEARCOAT)\\s*[-+*/]?=[^=]") and not src.contains("SPECULAR_LIGHT")
+			and not _regex_hit(src, "\\bAMBIENT\\b"))
+		check("REQ-21: %s uses the Lommel-Seeliger term 2 cos i / (cos i + cos e) only" % nm,
+			src.contains("2.0 * cos_i / (cos_i + cos_e)") and src.contains("DIFFUSE_LIGHT +="))
+	# REQ-23: rocks are drawn with the same law and the rock shader is the one the rock material loads.
+	check("REQ-23: near_world.gd loads lunar_rock.gdshader for rocks",
+		FileAccess.get_file_as_string(NEAR_WORLD).contains("res://shaders/lunar_rock.gdshader"))
+
+	# REQ-22 / D8: detail albedo is multiplicative, at most +-5 %. a is a weighted sum (0.6 + 0.4 = 1) of value
+	# noise in [-1, 1] (hash13 maps to [-1, 1]), and the clamp repeats the bound.
+	var lsrc := FileAccess.get_file_as_string(LUNAR_SHADER)
+	check("REQ-22: detail albedo is albedo *= 1 + 0.05 * clamp(a, -1, 1) with fade (+-5 % bound)",
+		lsrc.contains("albedo *= 1.0 + 0.05 * clamp(a, -1.0, 1.0) *"))
+	check("REQ-22: detail noise weights sum to 1 and hash13 returns [-1, 1] (+-5 % bound)",
+		lsrc.contains("float a = 0.6 * vnoise(local_m, 0.1) + 0.4 * vnoise(local_m + 7.3, 0.03);")
+		and lsrc.contains("float(h) * (2.0 / 4294967295.0) - 1.0"))
+	# REQ-24: grain normal faded to zero beyond 20 m, no new texture (only albedo and the existing normal map).
+	check("REQ-24: grain fade is 1 - smoothstep(8, 20, distance in m), so zero beyond 20 m",
+		lsrc.contains("float grain_fade = 1.0 - smoothstep(8.0, 20.0, dist_m);") and lsrc.contains("if (grain_fade > 0.0)"))
+	check("REQ-24: shader declares only the existing two textures (albedo and normal map)",
+		lsrc.count("uniform sampler2D") == 2)
+	for d in [20.0, 20.5, 50.0, 1000.0, 1.0e6]:
+		var fade := 1.0 - _smoothstep(8.0, 20.0, d)
+		check("REQ-24: grain fade at %s m is zero" % d, fade == 0.0, "fade %s" % fade)
+	check("REQ-24: grain fade at 0 m is 1 (replica of the shader formula)", 1.0 - _smoothstep(8.0, 20.0, 0.0) == 1.0)
+
+
+func test_rock_albedo_factor() -> void:
+	# REQ-23: per-rock albedo factor in [1.0, 1.3], from the material stream (4). Source line and a replica of it.
+	var src := FileAccess.get_file_as_string(NEAR_WORLD)
+	check("REQ-23: rock albedo factor is 1.0 + 0.3 x u with u in [0, 1) from the material hash",
+		src.contains("b.append(1.0 + 0.3 * float((h >> 11) & 0x1FFFFFFFFFFFFF) / 9007199254740992.0)"))
+	var t = ClassDB.instantiate("LunarTerrain")
+	var problem: String = t.load_data(ProjectSettings.globalize_path("res://"))
+	check("REQ-23: native library loads its data for the rock factor replica", problem == "", problem)
+	if problem != "":
+		return
+	var lo := INF
+	var hi := -INF
+	for i in 2000:
+		var h: int = t.hash64(7, 4, 0, i, i * 3 - 500, 1000 - i, i % 17)
+		var f := 1.0 + 0.3 * float((h >> 11) & 0x1FFFFFFFFFFFFF) / 9007199254740992.0
+		lo = minf(lo, f)
+		hi = maxf(hi, f)
+	check("REQ-23: 2000 replica rock factors lie in [1.0, 1.3) (min %.6f, max %.6f)" % [lo, hi],
+		lo >= 1.0 and hi < 1.3, "min %s max %s" % [lo, hi])
+
+
+func test_phase4_shadow_splits() -> void:
+	# REQ-25: below 10 km the splits are 0.02, 0.2 and 2 km with S(D) as max distance; above 10 km M3 REQ-5/6 values.
+	# Godot's split values are fractions of the max distance, so fraction x max must equal the km value.
+	var main := spawn_main()
+	var fly = main.get_node("FlyCamera")
+	var sun := main.get_node("Sun") as DirectionalLight3D
+	fly.set_active(true)
+	if fly.terrain == null:
+		check("REQ-25: fly mode has the native terrain for the shadow check", false, "fly mode disabled")
+		free_main(main)
+		return
+	fly.place_at(0.674, 23.473, 1.7)
+	fly._apply()
+	var r: float = sqrt(fly.px * fly.px + fly.py * fly.py + fly.pz * fly.pz)
+	var max_d := sun.directional_shadow_max_distance
+	check("REQ-25: at 1.7 m altitude the max shadow distance is S(D) (%.4f km, expected %.4f)" % [max_d, _shadow_distance_expected(r)],
+		near(max_d, _shadow_distance_expected(r), 1e-3))
+	check("REQ-25: at 1.7 m altitude the splits are 0.02, 0.2 and 2 km (x max distance)",
+		near(sun.directional_shadow_split_1 * max_d, 0.02, 1e-4) and near(sun.directional_shadow_split_2 * max_d, 0.2, 1e-4)
+		and near(sun.directional_shadow_split_3 * max_d, 2.0, 1e-4),
+		"splits %s %s %s max %s" % [sun.directional_shadow_split_1, sun.directional_shadow_split_2,
+			sun.directional_shadow_split_3, max_d])
+	fly.place_at(0.674, 23.473, 50000.0)
+	fly._apply()
+	r = sqrt(fly.px * fly.px + fly.py * fly.py + fly.pz * fly.pz)
+	check("REQ-25: at 50 km altitude the splits are the M3 values 0.1, 0.2 and 0.5",
+		near(sun.directional_shadow_split_1, 0.1, 1e-6) and near(sun.directional_shadow_split_2, 0.2, 1e-6)
+		and near(sun.directional_shadow_split_3, 0.5, 1e-6),
+		"splits %s %s %s" % [sun.directional_shadow_split_1, sun.directional_shadow_split_2, sun.directional_shadow_split_3])
+	check("REQ-25: at 50 km altitude the max shadow distance is S(D) (M3 REQ-6)",
+		near(sun.directional_shadow_max_distance, _shadow_distance_expected(r), 1e-3),
+		"max %s" % sun.directional_shadow_max_distance)
+	fly.set_active(false)
+	free_main(main)
+
+
+## Runs scripts/scenario.gd headless with the given user arguments. Returns [exit code, combined output].
+func _run_scenario(args: Array) -> Array:
+	var cmd := PackedStringArray(["--headless", "--path", ProjectSettings.globalize_path("res://"), "--script", "scripts/scenario.gd", "--"])
+	for a in args:
+		cmd.append(str(a))
+	var out := []
+	var code := OS.execute(OS.get_executable_path(), cmd, out, true)
+	return [code, "\n".join(out)]
+
+
+func test_req7a_sun_override() -> void:
+	# REQ-7a: N=7 CAM=ground SUN_EL=5 gives local elevation 5 +-0.01 and azimuth 90 +-0.01 (scenario 7 azimuth).
+	var res := _run_scenario(["7", "ground", "5"])
+	var text: String = res[1]
+	var re := RegEx.new()
+	re.compile("sun local elevation=(-?[0-9.]+) azimuth=([0-9.]+)")
+	var m := re.search(text)
+	check("REQ-7a: scenario 7 ground SUN_EL=5 exits 0 (exit %d)" % res[0], res[0] == 0, text.left(400))
+	if m == null:
+		check("REQ-7a: scenario 7 ground SUN_EL=5 prints the sun line", false, text.left(400))
+	else:
+		var el := m.get_string(1).to_float()
+		var az := m.get_string(2).to_float()
+		check("REQ-7a: local Sun elevation is 5 +-0.01 (read %.4f)" % el, absf(el - 5.0) <= 0.01)
+		check("REQ-7a: local Sun azimuth is 90 +-0.01 (read %.4f)" % az, absf(az - 90.0) <= 0.01)
+	# REQ-7a: a value outside -90..90 prints one ERROR line and exits 2.
+	var bad := _run_scenario(["7", "ground", "95"])
+	check("REQ-7a: SUN_EL=95 exits 2 (exit %d)" % bad[0], bad[0] == 2, bad[1].left(400))
+	check("REQ-7a: SUN_EL=95 prints one ERROR line", bad[1].count("ERROR") == 1, bad[1].left(400))
+
+
+# ---------------------------------------------------------------- Phase 5 LOD and streaming (REQ-26 to REQ-30)
+
+## Runs the quadtree's frames (plans and builds) until no build is queued or running, or 400 frames pass.
+func _settle_quadtree(qt: Node) -> bool:
+	for i in 400:
+		qt._process(0.0)
+		OS.delay_msec(20)
+		if i >= 10 and qt._queued.is_empty() and qt._tasks.is_empty():
+			return true
+	return false
+
+
+## Vertex index of edge vertex k on side e (0 bottom, 1 top, 2 left, 3 right), as in LunarTerrain indices.
+func _edge_index(e: int, k: int) -> int:
+	match e:
+		0: return k
+		1: return 64 * 65 + k
+		2: return k * 65
+	return k * 65 + 64
+
+
+func _world(c: PackedFloat64Array, v: Vector3) -> PackedFloat64Array:
+	return PackedFloat64Array([c[0] + v.x, c[1] + v.y, c[2] + v.z])
+
+
+func test_lod_streaming() -> void:
+	var main := spawn_main()
+	var fly = main.get_node("FlyCamera")
+	var qt: Node = main.get_node("TerrainQuadtree")
+	fly.set_active(true)
+	fly.place_at(0.0, 45.0, 1.7)
+	check("REQ-26: quadtree split above 2 px, merge below 1.4 px, depth limit 18",
+		qt.split_px == 2.0 and qt.merge_px == 1.4 and qt.max_depth == 18)
+	var t0 := Time.get_ticks_msec()
+	var settled := _settle_quadtree(qt)
+	check("REQ-27: builds settle within 400 frames at 1.7 m (%d ms)" % (Time.get_ticks_msec() - t0), settled)
+	check("REQ-29: default node limit 2500 and byte limit 600 MB (%d, %d)" % [qt.node_limit, qt.byte_limit],
+		qt.node_limit == 2500 and qt.byte_limit == 600000000)
+	var roots := 0
+	var deepest := 0
+	var dup_resident := 0
+	for key in qt._nodes:
+		if qt._nodes[key]["root"]:
+			roots += 1
+		deepest = maxi(deepest, qt.key_depth(key))
+	for key in qt._tasks:
+		if qt._nodes.has(key):
+			dup_resident += 1
+	check("REQ-26: 96 roots, all 96 chunks registered (%d)" % roots, roots == 96)
+	check("REQ-26: quadtree splits below depth 0 at 1.7 m and never past 18 (deepest %d)" % deepest,
+		deepest >= 1 and deepest <= 18)
+	# REQ-27: main-thread resource creation within 2 ms per frame (measured as the largest frame cost).
+	check("REQ-27: main-thread resource time per frame <= 2 ms (max %d us)" % qt.max_main_thread_usec,
+		qt.max_main_thread_usec <= 2000, "max %d us" % qt.max_main_thread_usec)
+	check("REQ-27: one node's resource creation <= 2 ms (max %d us)" % qt.max_create_usec,
+		qt.max_create_usec <= 2000, "max %d us" % qt.max_create_usec)
+	# REQ-28: no node queued or running twice, and no running build for a resident node.
+	var seen := {}
+	var queued_dup := 0
+	for key in qt._queued:
+		if seen.has(key):
+			queued_dup += 1
+		seen[key] = true
+	check("REQ-28: no node queued twice and no running build for a resident node",
+		queued_dup == 0 and dup_resident == 0, "queued dup %d, resident+running %d" % [queued_dup, dup_resident])
+	# REQ-28 cancel: builds queued for one place are dropped when the camera moves away before they start.
+	fly.place_at(10.0, 100.0, 1.7)
+	qt._update_camera()
+	qt._plan()
+	var pending: int = qt._queued.size() + qt._tasks.size()
+	check("REQ-28: a new place starts or queues builds (%d pending)" % pending, pending > 0)
+	var cancels_before: int = qt.cancel_count
+	# REQ-29: node limit lowered so eviction must run; a camera 500 km up wants no detail.
+	qt.node_limit = 50
+	fly.place_at(-60.0, 200.0, 500000.0)
+	qt._update_camera()
+	qt._plan()
+	_settle_quadtree(qt)
+	check("REQ-28: queued builds for the old place are cancelled (cancel_count %d -> %d)" % [cancels_before, qt.cancel_count],
+		qt.cancel_count > cancels_before)
+	var nonroot := 0
+	for key in qt._nodes:
+		if not qt._nodes[key]["root"]:
+			nonroot += 1
+	check("REQ-29: resident non-root nodes stay within the node limit (%d of %d)" % [nonroot, qt.node_limit],
+		nonroot <= qt.node_limit)
+	check("REQ-29: tile cache holds at most 24 LDEM_64 tiles (%d bytes)" % fly.terrain.tile_bytes(),
+		fly.terrain.tile_bytes() <= 24 * 1920 * 1920 * 2)
+	check("REQ-29: resident node bytes within the byte limit (%d)" % qt.resident_bytes,
+		qt.resident_bytes <= qt.byte_limit)
+	# REQ-30: skirts on every node, 0.25 x spacing straight down; geomorph weight in 0..1.
+	var terrain = fly.terrain
+	var d := 5
+	var a: Dictionary = terrain.build_node(0, d, 3, 3)
+	var verts: PackedVector3Array = a["verts"]
+	var cen: PackedFloat64Array = a["centre_xyz"]
+	var spacing: float = a["spacing_km"]
+	var skirt_ok := verts.size() == 4485
+	var worst_len := 0.0
+	var worst_dir := 0.0
+	for e in 4:
+		for t in 65:
+			var ev := verts[_edge_index(e, t)]
+			var sk := verts[4225 + e * 65 + t]
+			var drop := (sk - ev).length()
+			worst_len = maxf(worst_len, absf(drop / (0.25 * spacing) - 1.0))
+			var radial := Vector3(cen[0] + ev.x, cen[1] + ev.y, cen[2] + ev.z).normalized()
+			worst_dir = maxf(worst_dir, absf((sk - ev).normalized().dot(radial) + 1.0))
+	check("REQ-30: 4485 vertices per node (grid plus 4 skirt rows of 65)", skirt_ok, "%d" % verts.size())
+	check("REQ-30: skirt drops 0.25 x spacing (worst relative error %.4f)" % worst_len, worst_len <= 0.01)
+	check("REQ-30: skirt drops straight down along the radial (worst %.4f)" % worst_dir, worst_dir <= 1e-3)
+	# REQ-30: same-depth shared edges within tol(d) = max(1e-6 km, 1e-4 x spacing). Small nodes only (float32).
+	for dd in [17, 18, 15, 12, 8, 4]:
+		var gap := 0.0
+		var spacing := 0.0
+		var mid: int = (4 << dd) / 3
+		for k in [0, 1]:
+			var b1: Dictionary = terrain.build_node(0, dd, mid + k, mid)
+			var b2: Dictionary = terrain.build_node(0, dd, mid + k + 1, mid)
+			var v1: PackedVector3Array = b1["verts"]
+			var v2: PackedVector3Array = b2["verts"]
+			var c1: PackedFloat64Array = b1["centre_xyz"]
+			var c2: PackedFloat64Array = b2["centre_xyz"]
+			spacing = b1["spacing_km"]
+			for j in 65:
+				var p1 := _world(c1, v1[_edge_index(3, j)])
+				var p2 := _world(c2, v2[_edge_index(2, j)])
+				gap = maxf(gap, Vector3(p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2]).length())
+		var tol := maxf(1e-6, 1e-4 * spacing)
+		check("REQ-30: same-depth shared edges match within tol %s km at depth %d" % [tol, dd], gap <= tol, "gap %s km" % gap)
+	# REQ-30: w = clamp((2.6 - 2 x own_err) / 0.6, 0, 1) for every shown non-root node, own_err from the quadtree.
+	var morph_ok := true
+	for key in qt._nodes:
+		var e: Dictionary = qt._nodes[key]
+		if not e["root"] and e["mi"].visible:
+			var m: float = e["mi"].get_instance_shader_parameter("morph")
+			var want := clampf((2.6 - 2.0 * qt._error_px(key)) / 0.6, 0.0, 1.0)
+			if absf(m - want) > 1e-6:
+				morph_ok = false
+	check("REQ-30: every shown non-root node has the geomorph weight from its own error", morph_ok)
+	# REQ-30 anchors on the parent error: w = 1 at 2 px, 0.5 at 2.3 px, 0 at 2.6 px (formula only, see report).
+	for c in [[2.0, 1.0], [2.3, 0.5], [2.6, 0.0]]:
+		check("REQ-30: morph weight at parent error %s px is %s" % [c[0], c[1]],
+			absf(clampf((2.6 - c[0]) / 0.6, 0.0, 1.0) - c[1]) <= 1e-9)
+	free_main(main)
+
+
+# REQ-26 to REQ-29: fly forward at 1.7 m for FLY_PATH_SECONDS of wall time (default 60), checking every frame.
+# shortcut: one straight path at 1.7 m, not scenario 10's two points; the 10 min run is FLY_PATH_SECONDS=600, run by hand.
+func test_fly_path() -> void:
+	var main := spawn_main()
+	var fly = main.get_node("FlyCamera")
+	var qt: Node = main.get_node("TerrainQuadtree")
+	fly.set_active(true)
+	fly.place_at(0.0, 45.0, 1.7)
+	var env := OS.get_environment("FLY_PATH_SECONDS")
+	var seconds := env.to_float() if env != "" else 60.0
+	var end := Time.get_ticks_msec() + int(seconds * 1000.0)
+	var t_prev := Time.get_ticks_msec()
+	var frames := 0
+	var dup := 0
+	var max_resident := 0
+	var max_nonroot := 0
+	var max_tile_bytes := 0
+	while Time.get_ticks_msec() < end:
+		var now := Time.get_ticks_msec()
+		fly.advance((now - t_prev) / 1000.0, Vector3(0, 0, 1))
+		t_prev = now
+		fly._process(0.0)
+		qt._process(0.0)
+		frames += 1
+		var seen := {}
+		for key in qt._queued:
+			if seen.has(key):
+				dup += 1
+			seen[key] = true
+		var nonroot := 0
+		for key in qt._nodes:
+			if not qt._nodes[key]["root"]:
+				nonroot += 1
+		max_nonroot = maxi(max_nonroot, nonroot)
+		max_resident = maxi(max_resident, qt.resident_bytes)
+		max_tile_bytes = maxi(max_tile_bytes, fly.terrain.tile_bytes())
+	check("REQ-28: fly path (%d frames, %.0f s): no node queued twice (%d duplicates)" % [frames, seconds, dup], dup == 0)
+	check("REQ-28: fly path: at least one cancellation (cancel_count %d)" % qt.cancel_count, qt.cancel_count >= 1)
+	check("REQ-27: fly path: main-thread resource time per frame <= 2 ms (max %d us)" % qt.max_main_thread_usec,
+		qt.max_main_thread_usec <= 2000)
+	check("REQ-29: fly path: resident bytes within the byte limit every frame (max %d of %d)" % [max_resident, qt.byte_limit],
+		max_resident <= qt.byte_limit)
+	check("REQ-29: fly path: resident non-root nodes within the node limit every frame (max %d of %d)" % [max_nonroot, qt.node_limit],
+		max_nonroot <= qt.node_limit)
+	check("REQ-29: fly path: tile cache within 24 LDEM_64 tiles every frame (max %d bytes)" % max_tile_bytes,
+		max_tile_bytes <= 24 * 1920 * 1920 * 2)
+	free_main(main)
+
 
 func test_repo_scan() -> void:
 	check("REQ-23: no addons/ directory",

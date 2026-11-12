@@ -277,6 +277,7 @@ func _build_terrain(material: Material) -> void:
 				var chunk := MeshInstance3D.new()
 				chunk.name = "Chunk_%d_%d_%d" % [f, cx, cy]
 				chunk.mesh = mesh
+				chunk.layers = 3  # layer 1 (all) + layer 2 (terrain, drawn by the fly near camera)
 				add_child(chunk)
 
 

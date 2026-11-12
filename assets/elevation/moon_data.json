@@ -148,6 +148,1448 @@
       "sha256": "30e836e84bec102bca88d07e258c13307a511a4d282e65b62c6e99b421323a04"
     }
   ],
+  "ldem64_tiles": [
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c00.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        0.0,
+        30.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "208c0f0d0b7c6ca81800fe84578c32c166f32acc00cb9ab5e70fdc306faa6224"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c01.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        30.0,
+        60.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "0f0e2bbef582e72876a3156a2cbec66a371ccf993c0820b766f33ec96cedfa10"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c02.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        60.0,
+        90.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "b1b26b5cd15dab04a4c76045e115a79221b7b9472fe4390e5cb58d9e07862ead"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c03.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        90.0,
+        120.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "1d69dac6dd32ff141619dde3022a24a946dcf8e55991e389f11907bebb365bbd"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c04.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        120.0,
+        150.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "d769993d69e3f70e5378a0f3548069bfb20c06126d416fea8508361da9dc833d"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c05.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        150.0,
+        180.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "a45f1a8a2772016628bd1dc696b0ca4aa20707072834c4ee811edf35a985ba4b"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c06.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        180.0,
+        210.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "67a7e1c377a45f58d3aeebc5f5cddf1f0e28d7e088b24f3f8eb1a4d7fad2a5d7"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c07.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        210.0,
+        240.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "7c2bfb0f96205d73722891d04fff29837cb0c82ff87784c27aa88f3b50f663b0"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c08.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        240.0,
+        270.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "2a71834961d3a6f40632612e41cfc8db8b1da0ecf110ed2a258a83300600b9d3"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c09.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        270.0,
+        300.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "148fa7c718c5e0a8229693a7e09ab007bfaad98be376688a8fda52d69d60ec66"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c10.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        300.0,
+        330.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "6385da05e8ab3386960d42119d5c5ab3314c6da2d941889c65adca3f663e94b8"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r00_c11.i16",
+      "lat_range_deg_north_south": [
+        90.0,
+        60.0
+      ],
+      "lon_range_deg_west_east": [
+        330.0,
+        360.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "c548ee1f8e836d564c970aea20285d4e7527bea6e072a75da298130b5b678c7b"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c00.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        0.0,
+        30.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "91003bea0b4bb8614313878191c7350dfdd57ea24e2005f4066a80efb4d87c45"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c01.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        30.0,
+        60.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "eff6991ebd1f2fa1203a3397b9f99bb5859758125b3a23dafbca096a69f185ba"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c02.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        60.0,
+        90.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "f9cdaac8af107b757e1b402fe85b266c99697fb3df14d7c331de6341ff69b67e"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c03.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        90.0,
+        120.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "58e5ce3c1249ec6e24f9d94df86c9b5226f024cef969186b6f021b5dc936cca6"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c04.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        120.0,
+        150.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "1ca05f4859b7e1c09a4c053c0f75d7868c2f746657d0152654c43b89b0197313"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c05.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        150.0,
+        180.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "02431038958f29617d462514fc6db482c4ce535d1cdeb4d87acefb6d7dcea1ad"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c06.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        180.0,
+        210.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "6acd7d389ad5e8d31b033709ff4fc51b300d3d92b03cf3594a831b4d075ae259"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c07.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        210.0,
+        240.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "eaf6f2f8c1b82f6ca063e05c53ff6360e5975ebe36c4e51ee24e1f39c2d01c65"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c08.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        240.0,
+        270.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "0c9e01cabca86f43f516ef7ff2ad8f955e46a5cf33cf2acaf30aff095ff0a1c1"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c09.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        270.0,
+        300.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "fabb44b4bb7899d2e1a37fd1b3506fced75d85c6353cacbf347fd7e6506bb742"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c10.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        300.0,
+        330.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "67fdd4fd175811d635fd0111f17a543760a639a9853fcd988c7c2d67a5f77ccb"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r01_c11.i16",
+      "lat_range_deg_north_south": [
+        60.0,
+        30.0
+      ],
+      "lon_range_deg_west_east": [
+        330.0,
+        360.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "2a4f4125a1838595b08216fef52738252b3da86976b62611cf5688166fe1f183"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c00.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        0.0,
+        30.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "098270f24ce56457bac61a9bfa5c8d889be9885c04c28686dcc0104a6e16a912"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c01.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        30.0,
+        60.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "1bbb15f9c479a94fbdd1fa5df6408d5f1016287c09261553df6d92bda056a385"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c02.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        60.0,
+        90.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "95ae31f44271a269b02b0f33cb20b45a6321a5d5f84a774c0cf258b2f34a92cd"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c03.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        90.0,
+        120.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "11814121ca33cf0d993d9422f6d7bde3636962269d179c4c3affd3992d31e95a"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c04.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        120.0,
+        150.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "9d366a96daa4f33248c5d2734b4467a0068bed6d3b0a2619a6f533d24b6bfdd8"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c05.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        150.0,
+        180.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "5d0591e61d653b1de903e436ab529db2c007e199a81e99dbab534e67c6de78b4"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c06.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        180.0,
+        210.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "ab84c151b3ee4de4476702355456562503b1ac84f91b93285f8886b64b1041df"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c07.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        210.0,
+        240.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "ec857ed54e89a5b0d201117680d47971c103bf9e78faca5556c96de817762aed"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c08.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        240.0,
+        270.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "9c486fa78a78d7d59c3694eee329341f390a47dac9ffae5f5799fbfe87fe6b0a"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c09.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        270.0,
+        300.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "de9571c7bda134d2ca47154b535e520a89411e9c802228f710801331482d9735"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c10.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        300.0,
+        330.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "53ccb23b9b2465b5a3edf060f938ba0bc3ba41309e360b662941e3111862d0b4"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r02_c11.i16",
+      "lat_range_deg_north_south": [
+        30.0,
+        0.0
+      ],
+      "lon_range_deg_west_east": [
+        330.0,
+        360.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "001700e37d76642f649b944e2472fd79038375b41e0fa8da40803f0c756001a9"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c00.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        0.0,
+        30.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "a71dc088e74bee5b99062517c3335063a17759d6659d352c8fcb3c07cdcf93fd"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c01.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        30.0,
+        60.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "a1f521afbe0e38e191727422f16caf81c037f56cbd04e67bf08a472d97be2957"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c02.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        60.0,
+        90.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "8098b0c54052fea5a774e7c69f58a6dd55d509b8bd714fff599b5409aab92ff8"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c03.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        90.0,
+        120.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "2b809338128d6c024c1097178272512d35c771b5c42455ffa642298bca144f21"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c04.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        120.0,
+        150.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "acd69e31f799dc9c53914dc20285cc6edef210495549bfa4b8eef26b8c2aa22d"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c05.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        150.0,
+        180.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "0e3fdad8acb2bbd8695f8f96e73a7cbbe64e136d718df01a5ff9e85ce97ed0e2"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c06.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        180.0,
+        210.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "98c70b56aea8f0df37d0622c688945cf546edd53b43d5c1f484bc1674a28fc66"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c07.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        210.0,
+        240.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "e57fd9f0f610c9dfe86e18cdc8d3020c8ffbd8fc0f51894b042b715706f020f0"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c08.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        240.0,
+        270.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "2725b3215682438da18b82ed01effabaa20d7ce9450e438ff6b2682f66e65144"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c09.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        270.0,
+        300.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "bfeb3f237a900e16fcf05cc9972bda7007be6ba21174bd0bd4dfb1c28f8caf53"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c10.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        300.0,
+        330.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "a54a71eca6fa01be8de1c839b13015344728e57ecab7b00f122d8d929bec451d"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r03_c11.i16",
+      "lat_range_deg_north_south": [
+        0.0,
+        -30.0
+      ],
+      "lon_range_deg_west_east": [
+        330.0,
+        360.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "1d760e1f58ade55867b27409b7e8d07adbd7edd8cca6e46a32efe49956eb6d18"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c00.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        0.0,
+        30.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "737ddf9fd9739c85e07a34fa55fc6dee6c8a5ad904c4745029203c382690e3cf"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c01.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        30.0,
+        60.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "62cd8987293648d63fac39cc27da485b2fa23d344c533a3de91f1a3beb49f115"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c02.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        60.0,
+        90.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "9ee29799f5b22d7e55b9ae4649d95b8c73d80ef4f7db63a670173ba3d29f1d62"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c03.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        90.0,
+        120.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "ec13819700e9cada25a71e561596078c3c781612059fa471dc72fbc9cc363332"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c04.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        120.0,
+        150.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "a2ee08069c6c514f34d6fc6fe739c82e3a59de3971b469a35485ad1d26b17b27"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c05.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        150.0,
+        180.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "5d7bfc173bc3b4c8c4dd87c6296c863427b96396bad2b7124e4d1cb8179b9916"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c06.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        180.0,
+        210.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "db2a614c7bc3406246199ef2986d87f62bacdca502398c5f324465098ba1b053"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c07.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        210.0,
+        240.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "546fc706ccdddcf20f43ce57e1261fe5010e78eed484069d5a738c20bb69613e"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c08.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        240.0,
+        270.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "6d67070bc8f776a15f83e7c28845d8e4d67636dc434558f6ccf134cca3a8cd73"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c09.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        270.0,
+        300.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "d5eda1851f131dce38772582493aae77164515f6494f28923e6d8ee4b8ea79ff"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c10.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        300.0,
+        330.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "e93ec9e91427c63ff9f310cae6e09696bba17c164444b5c81a1ed8400c1f9760"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r04_c11.i16",
+      "lat_range_deg_north_south": [
+        -30.0,
+        -60.0
+      ],
+      "lon_range_deg_west_east": [
+        330.0,
+        360.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "fe6e5a6c9d080af143c8c2dfe6ad1d2cd39642bd3c4c450fd64be4137ca620a8"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c00.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        0.0,
+        30.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "49bf55da76902fec88cd584b28492e5e429c67e6f32e4a30d2b355f2b52c2df2"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c01.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        30.0,
+        60.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "9e527113635d2344d6cc8b8223c77706069c6711aa9012d46af31ee77e619704"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c02.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        60.0,
+        90.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "9fa5c05d31cee98aab598d16441e03c8ec2e7290f259ae52d8ae947a2d6771dd"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c03.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        90.0,
+        120.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "5eece63235f20b77c02ce1dc7b8b1e4b0e01c5f7efb9c86459b216661cd9b137"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c04.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        120.0,
+        150.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "ea29304faa10b319348e29233b96dbf85c0b30aa6f89b4f284b9da1e68759b83"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c05.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        150.0,
+        180.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "a5b273058f697e1de38d5dac74e82c28a5596a082e3a235215bda603aa6463df"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c06.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        180.0,
+        210.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "d25e2cffc2236e44f5c866057c6c8e5b718be007e86d1855ff015cfcb23e5d90"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c07.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        210.0,
+        240.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "65425e952c1104ed55f5583201f4af362a34d0f54701a225d6eb554c93ee3e6b"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c08.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        240.0,
+        270.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "c96d3bbdfaac56620c86d5631cf75d024522c7c0c11c376fdbafb29b2a67051d"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c09.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        270.0,
+        300.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "8268bc0d8cfa2f5df796660a3572b7a97791fec550148116be4289ad77c575ac"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c10.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        300.0,
+        330.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "4300bc124be57f8a5887b268436b6243b76690384f8f66684510eced3fb6f39d"
+    },
+    {
+      "path": "assets/elevation/ldem64/ldem64_r05_c11.i16",
+      "lat_range_deg_north_south": [
+        -60.0,
+        -90.0
+      ],
+      "lon_range_deg_west_east": [
+        330.0,
+        360.0
+      ],
+      "width": 1920,
+      "height": 1920,
+      "data_type": "i16",
+      "byte_order": "little-endian",
+      "scale": 0.5,
+      "units": "m",
+      "reference_radius_m": 1737400.0,
+      "grid_convention": "cell-centred as the elevation levels (M2 REQ-8), tile-local: column x centre at lon_west + 30*(x+0.5)/1920 deg E, row y centre at lat_north - 30*(y+0.5)/1920 deg, row 0 is the northernmost row of the tile",
+      "sha256": "57b62b7564d9e116526f37b90b2a9f48cb73d9e5284b01237a14106fdabb2c9d"
+    }
+  ],
   "albedo": {
     "path": "assets/textures/lunar_albedo_4096x2048.png",
     "width": 4096,

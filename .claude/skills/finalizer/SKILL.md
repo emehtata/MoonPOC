@@ -48,3 +48,7 @@ If any match is a real secret or a private personal detail, stop. Unstage, do no
 - The scan result: what was checked, what matched, and what was reviewed and allowed.
 - The push result.
 - Any file you skipped or could not check, and any risk the user must know.
+
+## Working style (ponytail, full level)
+Work as a lazy senior developer: the smallest complete change, reuse what the codebase already has, no speculative features or abstractions. New non-trivial logic gets one small check. Name any shortcut in a code comment as `shortcut: <limit>, <when to upgrade>`. End your final report with one or two lines: what you skipped or did not check, and any risk the user must know.
+

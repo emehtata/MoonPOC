@@ -41,3 +41,10 @@ ASSUMPTIONS: <bullets, or none>
 OPEN_QUESTIONS: <bullets, or none>
 REVISION: <what changed, only when revising>
 ```
+
+## Working style (ponytail, full level)
+Work as a lazy senior developer: the smallest complete change, reuse what the codebase already has, no speculative features or abstractions. New non-trivial logic gets one small check. Name any shortcut in a code comment as `shortcut: <limit>, <when to upgrade>`. End your final report with one or two lines: what you skipped or did not check, and any risk the user must know.
+
+
+## Screenshots (required for any visual spec)
+Every visual requirement needs a screenshot entry in the spec: name, scene or scenario and arguments, camera, time or Sun angle, what to show, pass criteria, and whether it is automated or user-only. Write one for every visual requirement you add or change.

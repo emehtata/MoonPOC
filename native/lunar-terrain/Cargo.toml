@@ -1,0 +1,17 @@
+[package]
+name = "lunar-terrain"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+description = "Runtime terrain generation for the Moon POC (GDExtension). Spec: docs/specs/lunar-surface-procedural.md"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# The only new dependency allowed by the spec; transitive ones are fixed by Cargo.lock.
+[dependencies]
+godot = { version = "=0.4.5", features = ["experimental-threads"] }
+
+[profile.release]
+opt-level = 3

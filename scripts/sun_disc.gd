@@ -41,7 +41,8 @@ func update_disc() -> void:
 		return
 	radius = DISC_DISTANCE * SUN_RADIUS_KM / _sun.sun_distance_km
 	var d: Vector3 = _sun.sun_direction()
-	var cam_pos := _camera.global_position
+	var active_camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var cam_pos := (active_camera if active_camera else _camera).global_position
 	var centre := cam_pos + d * DISC_DISTANCE
 	var up := Vector3.UP
 	if absf(d.y) > 0.999:

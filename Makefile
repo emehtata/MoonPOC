@@ -166,3 +166,19 @@ moon-data: require-rust ## Build elevation levels, albedo, normal map and moon_d
 normal-map: require-rust ## Build the ENU normal map PNG from the 4096 x 2048 height level and add it to moon_data.json
 	cd tools/moon-data && RUSTUP_TOOLCHAIN=$(MOON_DATA_TOOLCHAIN) "$(CARGO)" build --release --locked
 	$(MOON_DATA) normal-map "$(MOON_ELEVATION_DIR)" "$(MOON_TEXTURES_DIR)"
+
+# Native terrain library (spec lunar-surface-procedural REQ-2). The pinned gdext 0.4.5 builds with Rust 1.90.0;
+# gdext 0.5.x needs 1.94. No C compiler: native/lunar-terrain/ld-wrapper.sh links with the system ld.
+NATIVE_DIR := native/lunar-terrain
+.PHONY: native native-test
+native: require-rust ## Build the lunar-terrain GDExtension (builds native/lunar-terrain and installs the .so in assets/native/, where Godot loads it)
+	cd $(NATIVE_DIR) && RUSTUP_TOOLCHAIN=$(MOON_DATA_TOOLCHAIN) "$(CARGO)" build --release --locked
+	cp $(NATIVE_DIR)/target/release/liblunar_terrain.so assets/native/liblunar_terrain.so
+
+native-test: require-rust ## Run the lunar-terrain crate unit tests
+	cd $(NATIVE_DIR) && RUSTUP_TOOLCHAIN=$(MOON_DATA_TOOLCHAIN) "$(CARGO)" test --release --locked
+
+# Scenario loader (spec lunar-surface-procedural REQ-7): make scenario N=1 CAM=ground [HEADLESS=1]
+.PHONY: scenario
+scenario: require-godot require-project native ## Load scenario N (1..11) at camera CAM (orbit|high|ground|1m|10cm|rock); HEADLESS=1 prints and exits; optional SUN_EL=<-90..90>
+	"$(GODOT)" $(if $(HEADLESS),--headless) --path . --script scripts/scenario.gd -- "$(N)" "$(CAM)" $(if $(SUN_EL),"$(SUN_EL)")
