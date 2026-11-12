@@ -3,6 +3,7 @@ extends SceneTree
 ## make scenario N=<1..11> CAM=<orbit|high|ground|1m|10cm|rock>   (HEADLESS=1 prints and exits 0)
 ## Run as: godot --path . --script scripts/scenario.gd -- N CAM [SUN_EL]
 ## SUN_EL (REQ-7a, degrees -90..90) replaces the scenario's Sun elevation; the azimuth stays.
+## Optional 4th argument PT (1-based) picks that table point of the scenario (default 1); pass SUN_EL too, e.g. 10 ground 10 2.
 
 const MAIN_SCENE := "res://scenes/main.tscn"
 const REFERENCE_RADIUS := 1737.4
@@ -33,25 +34,32 @@ const SCENARIOS := {
 var _n := 0
 var _cam := ""
 var _sun_el := 0.0
+var _pt := 0
 var _terrain
 var _frames := 0
 
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() < 2 or args.size() > 3 or not args[0].is_valid_int() or int(args[0]) < 1 or int(args[0]) > 11 or not CAMS.has(args[1]):
-		printerr("usage: make scenario N=<1..11> CAM=<%s> [SUN_EL=<-90..90>]" % "|".join(CAMS))
+	if args.size() < 2 or args.size() > 4 or not args[0].is_valid_int() or int(args[0]) < 1 or int(args[0]) > 11 or not CAMS.has(args[1]):
+		printerr("usage: make scenario N=<1..11> CAM=<%s> [SUN_EL=<-90..90> [PT]]" % "|".join(CAMS))
 		quit(2)
 		return
 	_n = int(args[0])
 	_cam = args[1]
 	_sun_el = SCENARIOS[_n][3]
-	if args.size() == 3:
+	if args.size() >= 3:
 		if not args[2].is_valid_float() or absf(args[2].to_float()) > 90.0:
 			printerr("ERROR: SUN_EL must be a number from -90 to 90, got '%s'" % args[2])
 			quit(2)
 			return
 		_sun_el = args[2].to_float()
+	if args.size() == 4:
+		if not args[3].is_valid_int() or int(args[3]) < 1 or int(args[3]) > SCENARIOS[_n][2].size():
+			printerr("ERROR: PT must be 1..%d for scenario %d, got '%s'" % [SCENARIOS[_n][2].size(), _n, args[3]])
+			quit(2)
+			return
+		_pt = int(args[3]) - 1
 	if not ClassDB.class_exists("LunarTerrain"):
 		printerr("ERROR: lunar-terrain native library missing (run 'make native')")
 		quit(1)
@@ -121,7 +129,7 @@ func _rim_point(c: Array) -> Array:
 ## Target point of the scenario: the table point, or the rim of the picked crater (scenarios 5 and 7).
 ## Scenario 6 takes the largest rock within 500 m (large rocks first, then medium).
 func _target() -> Array:
-	var point: Array = SCENARIOS[_n][2][0]
+	var point: Array = SCENARIOS[_n][2][_pt]
 	var pick := []
 	if _n == 6:
 		var rock := _pick_rock(point[0], point[1], 0.5, [2, 1])

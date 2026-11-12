@@ -1894,8 +1894,12 @@ func test_req7a_sun_override() -> void:
 # ---------------------------------------------------------------- Phase 5 LOD and streaming (REQ-26 to REQ-30)
 
 ## Runs the quadtree's frames (plans and builds) until no build is queued or running, or 400 frames pass.
+var _settle_frames := 0
+
 func _settle_quadtree(qt: Node) -> bool:
+	_settle_frames = 0
 	for i in 400:
+		_settle_frames += 1
 		qt._process(0.0)
 		OS.delay_msec(20)
 		if i >= 10 and qt._queued.is_empty() and qt._tasks.is_empty():
@@ -1925,6 +1929,7 @@ func test_lod_streaming() -> void:
 	check("REQ-26: quadtree split above 2 px, merge below 1.4 px, depth limit 18",
 		qt.split_px == 2.0 and qt.merge_px == 1.4 and qt.max_depth == 18)
 	var t0 := Time.get_ticks_msec()
+	var over_at_settle_start: int = qt.frames_over_budget
 	var settled := _settle_quadtree(qt)
 	check("REQ-27: builds settle within 400 frames at 1.7 m (%d ms)" % (Time.get_ticks_msec() - t0), settled)
 	check("REQ-29: default node limit 2500 and byte limit 600 MB (%d, %d)" % [qt.node_limit, qt.byte_limit],
@@ -1942,11 +1947,12 @@ func test_lod_streaming() -> void:
 	check("REQ-26: 96 roots, all 96 chunks registered (%d)" % roots, roots == 96)
 	check("REQ-26: quadtree splits below depth 0 at 1.7 m and never past 18 (deepest %d)" % deepest,
 		deepest >= 1 and deepest <= 18)
-	# REQ-27: main-thread resource creation within 2 ms per frame (measured as the largest frame cost).
-	check("REQ-27: main-thread resource time per frame <= 2 ms (max %d us)" % qt.max_main_thread_usec,
-		qt.max_main_thread_usec <= 2000, "max %d us" % qt.max_main_thread_usec)
-	check("REQ-27: one node's resource creation <= 2 ms (max %d us)" % qt.max_create_usec,
-		qt.max_create_usec <= 2000, "max %d us" % qt.max_create_usec)
+	# REQ-27 (Rev 14): settle rule on the 2 min run only (FLY_PATH_SECONDS >= 120).
+	if OS.get_environment("FLY_PATH_SECONDS").to_float() >= 120.0:
+		check("REQ-27: settle frames over 2 ms at most 0.1 %% (%d of %d)" % [qt.frames_over_budget - over_at_settle_start, _settle_frames],
+			qt.frames_over_budget - over_at_settle_start <= 0.001 * _settle_frames)
+		check("REQ-27: no settle frame over 30 ms (max %d us)" % qt.max_main_thread_usec,
+			qt.max_main_thread_usec <= 30000, "max %d us" % qt.max_main_thread_usec)
 	# REQ-28: no node queued or running twice, and no running build for a resident node.
 	var seen := {}
 	var queued_dup := 0
@@ -2005,7 +2011,7 @@ func test_lod_streaming() -> void:
 	# REQ-30: same-depth shared edges within tol(d) = max(1e-6 km, 1e-4 x spacing). Small nodes only (float32).
 	for dd in [17, 18, 15, 12, 8, 4]:
 		var gap := 0.0
-		var spacing := 0.0
+		var sp := 0.0
 		var mid: int = (4 << dd) / 3
 		for k in [0, 1]:
 			var b1: Dictionary = terrain.build_node(0, dd, mid + k, mid)
@@ -2014,12 +2020,12 @@ func test_lod_streaming() -> void:
 			var v2: PackedVector3Array = b2["verts"]
 			var c1: PackedFloat64Array = b1["centre_xyz"]
 			var c2: PackedFloat64Array = b2["centre_xyz"]
-			spacing = b1["spacing_km"]
+			sp = b1["spacing_km"]
 			for j in 65:
 				var p1 := _world(c1, v1[_edge_index(3, j)])
 				var p2 := _world(c2, v2[_edge_index(2, j)])
 				gap = maxf(gap, Vector3(p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2]).length())
-		var tol := maxf(1e-6, 1e-4 * spacing)
+		var tol := maxf(1e-6, 1e-4 * sp)
 		check("REQ-30: same-depth shared edges match within tol %s km at depth %d" % [tol, dd], gap <= tol, "gap %s km" % gap)
 	# REQ-30: w = clamp((2.6 - 2 x own_err) / 0.6, 0, 1) for every shown non-root node, own_err from the quadtree.
 	var morph_ok := true
@@ -2038,18 +2044,32 @@ func test_lod_streaming() -> void:
 	free_main(main)
 
 
-# REQ-26 to REQ-29: fly forward at 1.7 m for FLY_PATH_SECONDS of wall time (default 60), checking every frame.
-# shortcut: one straight path at 1.7 m, not scenario 10's two points; the 10 min run is FLY_PATH_SECONDS=600, run by hand.
+# REQ-26 to REQ-29 (scenario 10 path, spec Revision 11): start at point 1 (0 N, 45 E) at 1.7 m, heading north,
+# pitch -20; fly north at 20 m/s; in the first frame with nodes queued >= 1, hop to point 2 (35.264 N, 45 E);
+# keep flying north to FLY_PATH_SECONDS of wall time (default 60; 120 for the REQ-27/REQ-29 run).
+# shortcut: the north step is applied on the surface at 1.7 m (advance() would dive at pitch -20).
+const FLY_SPEED_MS := 20.0
+const FLY_ALT_M := 1.7
+
 func test_fly_path() -> void:
 	var main := spawn_main()
 	var fly = main.get_node("FlyCamera")
 	var qt: Node = main.get_node("TerrainQuadtree")
 	fly.set_active(true)
-	fly.place_at(0.0, 45.0, 1.7)
+	fly.yaw_deg = 0.0
+	fly.pitch_deg = -20.0
+	fly.place_at(0.0, 45.0, FLY_ALT_M)
 	var env := OS.get_environment("FLY_PATH_SECONDS")
 	var seconds := env.to_float() if env != "" else 60.0
 	var end := Time.get_ticks_msec() + int(seconds * 1000.0)
 	var t_prev := Time.get_ticks_msec()
+	var start_ms := t_prev
+	var lat := 0.0
+	var hopped := false
+	var hop_queued := 0
+	var hop_frame := -1
+	var hop_view_ok := false
+	var hop_pos_ok := false
 	var frames := 0
 	var dup := 0
 	var max_resident := 0
@@ -2057,10 +2077,24 @@ func test_fly_path() -> void:
 	var max_tile_bytes := 0
 	while Time.get_ticks_msec() < end:
 		var now := Time.get_ticks_msec()
-		fly.advance((now - t_prev) / 1000.0, Vector3(0, 0, 1))
+		var dt := (now - t_prev) / 1000.0
 		t_prev = now
-		fly._process(0.0)
+		if not hopped and qt._queued.size() >= 1:
+			hopped = true
+			hop_queued = qt._queued.size()
+			hop_frame = frames
+			lat = 35.264
+			fly.place_at(lat, 45.0, FLY_ALT_M)
+			hop_view_ok = fly.yaw_deg == 0.0 and fly.pitch_deg == -20.0
+			var ll: Array = fly.lat_lon()
+			hop_pos_ok = absf(ll[0] - 35.264) < 1e-6 and absf(ll[1] - 45.0) < 1e-6
+		else:
+			lat += rad_to_deg(dt * FLY_SPEED_MS / (REF_RADIUS_KM * 1000.0))
+			fly.place_at(lat, 45.0, FLY_ALT_M)
+		var over_before: int = qt.frames_over_budget
 		qt._process(0.0)
+		if qt.frames_over_budget > over_before:
+			print("REQ-27: fly path: frame %d at %d ms took over 2000 us" % [frames, Time.get_ticks_msec() - start_ms])
 		frames += 1
 		var seen := {}
 		for key in qt._queued:
@@ -2074,10 +2108,19 @@ func test_fly_path() -> void:
 		max_nonroot = maxi(max_nonroot, nonroot)
 		max_resident = maxi(max_resident, qt.resident_bytes)
 		max_tile_bytes = maxi(max_tile_bytes, fly.terrain.tile_bytes())
+	check("REQ-26: fly path: hop frame had nodes queued >= 1 (queued %d at frame %d of %d)" % [hop_queued, hop_frame, frames],
+		hopped and hop_queued >= 1, "queue never reached 1 after load in %d frames" % frames)
+	check("REQ-26: fly path: hop keeps heading 0 and pitch -20, lands at 35.264 N, 45 E", hop_view_ok and hop_pos_ok,
+		"view %s position %s" % [hop_view_ok, hop_pos_ok])
 	check("REQ-28: fly path (%d frames, %.0f s): no node queued twice (%d duplicates)" % [frames, seconds, dup], dup == 0)
 	check("REQ-28: fly path: at least one cancellation (cancel_count %d)" % qt.cancel_count, qt.cancel_count >= 1)
-	check("REQ-27: fly path: main-thread resource time per frame <= 2 ms (max %d us)" % qt.max_main_thread_usec,
-		qt.max_main_thread_usec <= 2000)
+	# REQ-27 (Rev 13) on the 2 min run: <= 0.1 % of frames over 2 ms, and no frame over 30 ms.
+	print("REQ-27: fly path: %d frames, max_main_thread_usec %d, frames_over_2ms %d" % [frames, qt.max_main_thread_usec, qt.frames_over_budget])
+	if seconds >= 120.0:
+		check("REQ-27: fly path: frames over 2 ms at most 0.1 %% (%d of %d)" % [qt.frames_over_budget, frames],
+			qt.frames_over_budget <= 0.001 * frames)
+		check("REQ-27: fly path: no frame over 30 ms (max %d us)" % qt.max_main_thread_usec,
+			qt.max_main_thread_usec <= 30000)
 	check("REQ-29: fly path: resident bytes within the byte limit every frame (max %d of %d)" % [max_resident, qt.byte_limit],
 		max_resident <= qt.byte_limit)
 	check("REQ-29: fly path: resident non-root nodes within the node limit every frame (max %d of %d)" % [max_nonroot, qt.node_limit],

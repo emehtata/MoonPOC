@@ -16,6 +16,8 @@ const MAX_DEPTH := 18
 ## Estimated bytes of one node's mesh: 4485 vertices x (position, normal, uv, morph) = 44 bytes each.
 const NODE_BYTES := 4485 * 44
 const MAIN_BUDGET_USEC := 2000
+const ROOTS := 96
+const EVICT_BUDGET_USEC := 1000
 const MAX_TASKS := 4
 ## Geometric error of a node as a fraction of its vertex spacing (assumption).
 const ERROR_FRACTION := 0.5
@@ -38,6 +40,7 @@ var max_main_thread_usec := 0
 var max_plan_usec := 0
 var create_usec_total := 0
 var max_create_usec := 0
+var frames_over_budget := 0
 var build_count := 0
 var shown_count := 0
 
@@ -253,27 +256,36 @@ func _task_build(key: int, out: Array) -> void:
 func _finish_builds() -> void:
 	var start := Time.get_ticks_usec()
 	var made := 0
+	var dropped := false
 	for key in _tasks.keys():
 		var task: Dictionary = _tasks[key]
 		if not WorkerThreadPool.is_task_completed(task["id"]):
 			continue
-		# Stop once another node (at the average creation cost) would pass the budget.
-		var avg := create_usec_total / maxi(1, build_count)
-		if made > 0 and Time.get_ticks_usec() - start + avg > MAIN_BUDGET_USEC:
+		if not _wanted_build.has(key) and not _split.has(key):
+			WorkerThreadPool.wait_for_task_completion(task["id"])
+			_tasks.erase(key)
+			cancel_count += 1  # no longer wanted: dropped before any resource is created, so not gated by the cap
+			dropped = true
+			continue
+		# Stop once another node (at the worst creation cost seen) would pass the budget.
+		if made > 0 and Time.get_ticks_usec() - start + max_create_usec > MAIN_BUDGET_USEC:
 			break
+		if _nodes.size() - ROOTS >= node_limit:
+			break  # cap reached: wait for _evict to free nodes, never exceed the cap (REQ-29)
 		WorkerThreadPool.wait_for_task_completion(task["id"])
 		_tasks.erase(key)
-		if not _wanted_build.has(key) and not _split.has(key):
-			cancel_count += 1  # no longer wanted: dropped before any resource is created
-			continue
 		var data: Dictionary = task["out"][0]
 		if not data.is_empty():
 			_create_node(key, data)
 			made += 1
+	if dropped:
+		_start_tasks()
 	if made > 0:
 		_dirty = true
 		_start_tasks()
-		max_main_thread_usec = maxi(max_main_thread_usec, Time.get_ticks_usec() - start)
+		var used := Time.get_ticks_usec() - start
+		max_main_thread_usec = maxi(max_main_thread_usec, used)
+		frames_over_budget += int(used > MAIN_BUDGET_USEC)
 
 
 func _create_node(key: int, data: Dictionary) -> void:
@@ -312,7 +324,9 @@ func _apply_display() -> void:
 				# Geomorph (REQ-30): parent-interpolated shape at the split error, own shape 0.6 px above it.
 				var parent_err := 2.0 * _error_px(key)
 				var m := clampf(1.0 - (parent_err - split_px) / (split_px - merge_px), 0.0, 1.0)
-				e["mi"].set_instance_shader_parameter("morph", m)
+				if e.get("morph", -1.0) != m:  # unchanged values cost no resource call
+					e["mi"].set_instance_shader_parameter("morph", m)
+					e["morph"] = m
 	_shown = show
 	shown_count = show.size()
 
@@ -336,9 +350,10 @@ func _collect(key: int, out: Dictionary) -> bool:
 
 
 func _evict() -> void:
-	var count := _nodes.size() - 96
+	var count := _nodes.size() - ROOTS
 	if count <= node_limit and resident_bytes <= byte_limit:
 		return
+	var start := Time.get_ticks_usec()
 	var victims := []
 	for key in _nodes:
 		var e: Dictionary = _nodes[key]
@@ -349,6 +364,8 @@ func _evict() -> void:
 	for v in victims:
 		if count <= node_limit and resident_bytes <= byte_limit:
 			break
+		if Time.get_ticks_usec() - start > EVICT_BUDGET_USEC:
+			break  # the rest goes next plan; creation is gated on the cap meanwhile
 		var e: Dictionary = _nodes[v[1]]
 		e["mi"].queue_free()  # frees the node's mesh and GPU buffers
 		resident_bytes -= e["bytes"]
