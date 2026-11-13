@@ -268,7 +268,7 @@ func _start_tasks() -> void:
 			duplicate_requests_blocked += 1
 			continue
 		var out := []
-		var id := WorkerThreadPool.add_task(_task_build.bind(key, out))
+		var id := WorkerThreadPool.add_task(_task_build.bind(key, out), true)  # high priority: the default (low) priority runs one task at a time (low_priority_thread_ratio)
 		_tasks[key] = {"id": id, "out": out}
 
 
