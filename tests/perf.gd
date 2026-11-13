@@ -15,6 +15,10 @@ const POSITIONS := [
 	["surface", 1748.232],
 	["earth_close", 19113.0],  # 3 x R_E from Earth's centre, pivot on Earth (Earth Milestone 2 REQ-17)
 ]
+## REQ-31: fly scenarios 1, 5 and 11 at CAM ground and 1m (table points; scenario.gd's crater pick is not used).
+const FLY_SCENARIOS := {1: [1, 0.674, 23.473], 5: [5, 0.674, 23.473], 11: [11, 0.674, 23.473]}
+const FLY_CAMS := {"ground": 1.7, "1m": 1.0}
+const SETTLE_FRAMES_MAX := 1500
 const DATA_FILES_DIR := "res://assets/elevation/"
 const ALBEDO_FILE := "res://assets/textures/lunar_albedo_4096x2048.png"
 const RENDER_STATS := ["FPS and frame time", "Draw calls", "Primitives", "Objects drawn",
@@ -90,6 +94,8 @@ func _run() -> void:
 			await _measure("%s clouds %s" % [p[0], "visible" if clouds else "hidden"], p[1])
 	print("texture memory MiB: %.1f" % (Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0))
 	print("video memory MiB: %.1f" % (Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0))
+	main.free()
+	await _fly_scenarios()
 	quit(0)
 
 
@@ -209,3 +215,51 @@ func _measure(name: String, distance: float) -> void:
 	print("primitives mean: %.1f" % (prims / n))
 	print("objects drawn mean: %.1f" % (objects / n))
 	print("process ms mean: %.3f" % (proc / n))
+
+
+## REQ-31: fly scenarios at ground and 1 m. Prints the quality level, then per run the _measure lines plus
+## video and process memory, node build time (mean, p95), nodes resident and nodes queued.
+func _fly_scenarios() -> void:
+	var terrain = ClassDB.instantiate("LunarTerrain")
+	var problem: String = terrain.load_data(ProjectSettings.globalize_path("res://"))
+	if problem != "":
+		print("fly scenarios: not run (%s)" % problem)
+		return
+	for n in FLY_SCENARIOS:
+		var sc: Array = FLY_SCENARIOS[n]
+		for cam in FLY_CAMS:
+			# A fresh scene per run: resident nodes of an earlier seed or camera must not carry over.
+			var main: Node = load(MAIN_SCENE).instantiate()
+			root.add_child(main)
+			await process_frame
+			var fly = main.get_node("FlyCamera")
+			var qt = main.get_node("TerrainQuadtree")
+			if n == 1 and cam == "ground":
+				print("== fly scenarios, quality: %s (split %s px, max depth %d, node limit %d, byte limit %d) ==" % [
+					OS.get_environment("MOON_QUALITY") if OS.get_environment("MOON_QUALITY") != "" else "medium",
+					qt.split_px, qt.max_depth, qt.node_limit, qt.byte_limit])
+			terrain.seed = n  # scenario seed equals its number
+			fly.terrain = terrain
+			fly.enter()
+			fly.place_at(sc[1], sc[2], FLY_CAMS[cam])
+			fly.yaw_deg = 0.0
+			fly.pitch_deg = -20.0
+			fly._apply()
+			var settle := 0
+			while settle < SETTLE_FRAMES_MAX and (settle < 10 or not qt._queued.is_empty() or not qt._tasks.is_empty()):
+				await process_frame
+				settle += 1
+			qt.build_ms = PackedFloat64Array()  # build times of the measured window only
+			await _measure("scenario %d CAM %s" % [n, cam], FLY_CAMS[cam])
+			var b: PackedFloat64Array = qt.build_ms.duplicate()
+			b.sort()
+			var mean := 0.0
+			for v in b:
+				mean += v
+			print("settle frames: %d" % settle)
+			print("node build ms (worker, %d builds in window): mean %.2f  p95 %.2f" % [b.size(),
+				mean / maxf(b.size(), 1.0), b[mini(b.size() - 1, int(ceil(b.size() * 0.95)) - 1)] if b.size() > 0 else 0.0])
+			print("nodes resident: %d  nodes queued: %d  running: %d" % [qt._nodes.size() - qt.ROOTS, qt._queued.size(), qt._tasks.size()])
+			print("video memory MiB: %.1f" % (Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0))
+			print("process memory MiB: %.1f" % (OS.get_static_memory_usage() / 1048576.0))
+			main.free()

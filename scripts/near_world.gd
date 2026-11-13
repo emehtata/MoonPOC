@@ -6,8 +6,8 @@ extends Node3D
 const TERRAIN_LAYERS := 3
 ## D2 stream id for rock material (albedo factor).
 const MATERIAL_STREAM := 4
-## Rock draw radius per category (small, medium, large) in km. Provisional until the Phase 6 quality levels.
-const DRAW_RADIUS_KM := [0.025, 0.25, 1.5]
+## Rock draw radius per category (small, medium, large) in km, from the quality level (REQ-34).
+var DRAW_RADIUS_KM: Array = preload("res://scripts/terrain_quadtree.gd").quality()["rock_km"]
 ## REQ-20: small rocks cast shadows within this distance; medium and large always.
 const SHADOW_DISTANCE_M := 200.0
 ## Chunk distance (m) below which LOD 0, then LOD 1 is used; LOD 2 beyond.

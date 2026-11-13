@@ -150,3 +150,31 @@ streaming so Earth is shown. Budgets: median frame time with clouds at most 1.0 
 | Draw call difference (budget 2) | pending user run |
 
 REQ-17 is open until the user runs this. Known approximations of the clouds are listed in `docs/ARCHITECTURE.md`, "Earth clouds".
+
+## Phase 6: quality levels and fly scenarios (REQ-31, REQ-33, REQ-34)
+
+Command: `MOON_QUALITY=low|medium|high make perf` (default medium). After the orbit positions, `tests/perf.gd` loads a fresh main scene per run for scenarios 1, 5 and 11 at the scenario's table point (the crater pick of scenario 5 is not used), CAM ground (1.7 m) and 1m, yaw 0, pitch -20. It waits for the builds to settle (at most 1500 frames), then samples 10 s and prints FPS, frame time, draw calls, primitives, node build time on the worker threads (mean, p95), nodes resident, nodes queued, video memory and process memory (`OS.get_static_memory_usage`, the engine's static allocations, not the OS resident set).
+
+Machine: Intel i3-4130, GeForce GTX 960, Vulkan Forward+, window under Wayland, V-Sync could not be disabled (the 60 FPS cap applies, so FPS and median are limited by V-Sync). Date 2026-11-13. This is an implementer run, not the REQ-32 user run.
+
+Quality levels (`QUALITY` in `scripts/terrain_quadtree.gd`): split 4 / 3 / 2 px and maximum depth 16 / 17 / 18 are from the spec; merge is 0.7 x split; node and byte limits and rock draw radii for Low and Medium are assumptions.
+
+| Level | Split px | Max depth | Node limit | Byte limit | Rock draw radius km (small, medium, large) |
+|---|---|---|---|---|---|
+| Low | 4 | 16 | 1200 | 300 MB | 0.015, 0.15, 0.8 |
+| Medium | 3 | 17 | 1800 | 420 MB | 0.02, 0.2, 1.2 |
+| High | 2 | 18 | 2500 | 600 MB | 0.025, 0.25, 1.5 |
+
+### Measured difference (REQ-33): the quality levels remove visible detail
+
+Mean of the 6 runs (scenarios 1, 5, 11 at ground and 1m), single run per level:
+
+| Level | Draw calls | Primitives | p95 frame ms | Max frame ms | Video memory MiB | Process memory MiB | Nodes resident (end of run) |
+|---|---|---|---|---|---|---|---|
+| Low | 2706 | 10.14 M | 20.2 | 35.8 (worst of 6) | 567.6 | 88 | 716 |
+| Medium | 3980 | 13.9 M | 24.3 | 45.6 (worst of 6) | 630.9 | 97 | 996 |
+| High | 4930 | 16.1 M | 27.7 | 45.8 (worst of 6) | 723 to 750 | 107 to 108 | 1410 to 1530 |
+
+Medium against High: about 19 % fewer draw calls, 14 % fewer primitives, p95 3.4 ms lower. Low against Medium: 32 % fewer draw calls, 27 % fewer primitives, p95 4.1 ms lower. Per-run numbers are in the report that came with this change; the runs are not repeated, so differences of a few percent are within noise.
+
+Not measured: the 1920 x 1080 window size (the window size was the project default), and a run with the rock draw radii changed alone.

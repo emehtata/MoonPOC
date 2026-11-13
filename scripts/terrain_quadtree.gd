@@ -10,9 +10,15 @@ extends Node3D
 ## Node positions are the node centre minus the floating origin, computed in doubles (D6).
 
 const TERRAIN_LAYERS := 3
-const SPLIT_PX := 2.0
-const MERGE_PX := 1.4
-const MAX_DEPTH := 18
+## Quality levels (REQ-34), the one selection point: env MOON_QUALITY = low | medium | high, default medium.
+## Split 4/3/2 px and depth 16/17/18 are from the spec; merge is 0.7 x split (High keeps the old 1.4 px). The rock draw
+## radii (km, small/medium/large) and cache limits for Low and Medium are assumptions; High keeps the Phase 5 values.
+const QUALITY := {
+	"low": {"split_px": 4.0, "max_depth": 16, "rock_km": [0.015, 0.15, 0.8], "node_limit": 1200, "byte_limit": 300_000_000},
+	"medium": {"split_px": 3.0, "max_depth": 17, "rock_km": [0.02, 0.2, 1.2], "node_limit": 1800, "byte_limit": 420_000_000},
+	"high": {"split_px": 2.0, "max_depth": 18, "rock_km": [0.025, 0.25, 1.5], "node_limit": 2500, "byte_limit": 600_000_000},
+}
+const MERGE_RATIO := 0.7
 ## Estimated bytes of one node's mesh: 4485 vertices x (position, normal, uv, morph) = 44 bytes each.
 const NODE_BYTES := 4485 * 44
 const MAIN_BUDGET_USEC := 2000
@@ -24,12 +30,12 @@ const ERROR_FRACTION := 0.5
 const PLAN_INTERVAL_MS := 100
 const REFERENCE_RADIUS := 1737.4
 
-@export var split_px := SPLIT_PX
-@export var merge_px := MERGE_PX
-@export var max_depth := MAX_DEPTH
-## LRU limits per node count and bytes (High quality defaults; REQ-34 sets them per quality in Phase 6).
-@export var node_limit := 2500
-@export var byte_limit := 600_000_000
+@export var split_px: float = quality()["split_px"]
+@export var merge_px: float = quality()["split_px"] * MERGE_RATIO
+@export var max_depth: int = quality()["max_depth"]
+## LRU limits per node count and bytes (set by the quality level, REQ-34).
+@export var node_limit: int = quality()["node_limit"]
+@export var byte_limit: int = quality()["byte_limit"]
 
 var terrain
 var fly: Node3D
@@ -51,6 +57,7 @@ var _frame_display := 0
 var _frame_evict := 0
 var instr_calls := 0  # timer calls made, for the overhead report
 var build_count := 0
+var build_ms := PackedFloat64Array()  # worker build time per node (perf report, REQ-31)
 var shown_count := 0
 
 var _moon: Node3D
@@ -71,6 +78,13 @@ var _planned_at := Vector3.ZERO
 var _frame := 0
 var _cam := [0.0, 0.0, 0.0]
 var _px_per_rad := 700.0
+
+
+static func quality() -> Dictionary:
+	var name := OS.get_environment("MOON_QUALITY").to_lower()
+	if name != "" and not QUALITY.has(name):
+		push_warning("MOON_QUALITY '%s' unknown (low, medium, high); using medium" % name)
+	return QUALITY.get(name, QUALITY["medium"])
 
 
 static func make_key(face: int, depth: int, x: int, y: int) -> int:
@@ -259,6 +273,7 @@ func _start_tasks() -> void:
 
 
 func _task_build(key: int, out: Array) -> void:
+	var t0 := Time.get_ticks_usec()
 	var data: Dictionary = terrain.build_node(key_face(key), key_depth(key), key_x(key), key_y(key))
 	if not data.is_empty():
 		# Mesh upload runs on the worker so the main thread only creates the node (REQ-27).
@@ -274,6 +289,7 @@ func _task_build(key: int, out: Array) -> void:
 		mesh.surface_set_material(0, _material)
 		data["mesh"] = mesh
 	out.append(data)
+	out.append((Time.get_ticks_usec() - t0) / 1000.0)  # worker build time in ms, read by _finish_builds
 
 
 ## Creates the meshes of finished builds, within the main-thread budget (REQ-27).
@@ -299,6 +315,7 @@ func _finish_builds() -> void:
 		WorkerThreadPool.wait_for_task_completion(task["id"])
 		_tasks.erase(key)
 		var data: Dictionary = task["out"][0]
+		build_ms.append(task["out"][1])
 		if not data.is_empty():
 			_create_node(key, data)
 			made += 1
