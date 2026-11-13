@@ -11,6 +11,7 @@ extends SceneTree
 
 const MAIN_SCENE := "res://scenes/main.tscn"
 const CloudCopy := preload("res://tests/cloud_noise_copy.gd")
+const QuadtreeScript := preload("res://scripts/terrain_quadtree.gd")
 const TEXTURE := "res://assets/textures/lunar_albedo_4096x2048.png"
 const DATA_SOURCES := "res://docs/DATA_SOURCES.md"
 const ARCHITECTURE := "res://docs/ARCHITECTURE.md"
@@ -1926,14 +1927,21 @@ func test_lod_streaming() -> void:
 	var qt: Node = main.get_node("TerrainQuadtree")
 	fly.set_active(true)
 	fly.place_at(0.0, 45.0, 1.7)
-	check("REQ-26: quadtree split above 2 px, merge below 1.4 px, depth limit 18",
-		qt.split_px == 2.0 and qt.merge_px == 1.4 and qt.max_depth == 18)
+	check("REQ-26: default quality is Medium: split above 3 px, merge below 2.1 px, depth limit 17",
+		qt.split_px == 3.0 and absf(qt.merge_px - 2.1) < 1e-9 and qt.max_depth == 17)
+	# REQ-34: MOON_QUALITY=high selects High (2 px, depth 18, 2500 nodes, 600 MB); the default is restored after.
+	var env_before := OS.get_environment("MOON_QUALITY")
+	OS.set_environment("MOON_QUALITY", "high")
+	var high: Dictionary = QuadtreeScript.quality()
+	OS.set_environment("MOON_QUALITY", env_before)
+	check("REQ-34: MOON_QUALITY=high gives 2 px split, depth 18, node limit 2500, byte limit 600 MB",
+		high["split_px"] == 2.0 and high["max_depth"] == 18 and high["node_limit"] == 2500 and high["byte_limit"] == 600000000)
 	var t0 := Time.get_ticks_msec()
 	var over_at_settle_start: int = qt.frames_over_budget
 	var settled := _settle_quadtree(qt)
 	check("REQ-27: builds settle within 400 frames at 1.7 m (%d ms)" % (Time.get_ticks_msec() - t0), settled)
-	check("REQ-29: default node limit 2500 and byte limit 600 MB (%d, %d)" % [qt.node_limit, qt.byte_limit],
-		qt.node_limit == 2500 and qt.byte_limit == 600000000)
+	check("REQ-29: default (Medium) node limit 1800 and byte limit 420 MB (%d, %d)" % [qt.node_limit, qt.byte_limit],
+		qt.node_limit == 1800 and qt.byte_limit == 420000000)
 	var roots := 0
 	var deepest := 0
 	var dup_resident := 0
