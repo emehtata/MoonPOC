@@ -84,7 +84,7 @@ The brief `docs/moon-geo.md` asks for a deterministic, multiscale lunar surface 
 ### Phase 3: surface geometry
 
 - **REQ-14** Rock categories with configurable ranges (defaults): fine debris below 2 cm (shader only, REQ-24), small 2 to 20 cm, medium 20 cm to 2 m, large 2 to 20 m. Rocks are placed per D2 in their own stream.
-- **REQ-15** Rock shapes as in D3. No rock is a scaled sphere: for each base mesh, the ratio of the longest to the shortest axis of its bounding box is at least 1.3, and the hull has at least 2 planar cut faces. Large class only (rounded boulders): the hull is built from 128 points, the cut faces together cover at most 25 % of the hull surface area, and after instance scale the shortest-to-longest extent ratio of every large rock is at least 0.5.
+- **REQ-15** Rock shapes as in D3. No rock is a scaled sphere: for each base mesh, the ratio of the longest to the shortest axis of its bounding box is at least 1.3, and the hull has at least 2 planar cut faces. Large class only (compact boulders; a faceted but compact silhouette is accepted, as in S3 and S7): the hull is built from 128 points, the cut faces together cover at most 25 % of the hull surface area, and after instance scale the shortest-to-longest extent ratio of every large rock is at least 0.5.
 - **REQ-16** Context. Rock density per m² is multiplied by:
   - 4 on a crater rim and ejecta within 1.5 R, for craters with age a < 0.3;
   - 1 + 3 x slope/30° for slopes up to 30°;
@@ -160,7 +160,7 @@ The "User part" column lists what needs the user's own judgement. It stays `pend
 | # | Name | Scenario, CAM, sun_el | Sun elev / az | Must show | Pass (screenshot agent) | User part | REQ |
 |---|---|---|---|---|---|---|---|
 | S1 | Rock field on a fresh rim | 5 ground; 5 1m | 10° / 90° | rocks of the small and medium classes on and around the picked rim | rocks are present; their outlines are irregular and angular with flat cut faces; none is round like a sphere | whether repetition is noticeable | 15 |
-| S2 | Rim versus plains density | 5 high | 10° / 90° | the picked crater and the plains around it | more rocks on the rim and ejecta than on the plains in the same image | none | 16 |
+| S2 | Rim versus plains density (removed, Revision 20) | none | none | none | removed: at CAM high (50 km) rocks are smaller than a pixel, so the image cannot show density. S2 is checked by the automated REQ-16 density row only | none | 16 |
 | S3 | Boulder contact and shadow | 6 rock; 6 ground | 8° / 90° | the picked largest rock where it meets the terrain | no gap or lit strip between the rock and the ground; a shadow falls on the side away from the Sun, joined to the base; the rock reads as a compact boulder: no flat blade, slab or shard, no dimension looks much shorter than the others; a faceted but compact silhouette is accepted; its shaded side faces away from the Sun | none | 17, 20 |
 | S4 | Small-scale relief | 1 1m; 1 10cm | 10° / 90° | bare plains | the ground shows bumps and small craters with their own small cast shadows, not a flat plane; no regular repeating pattern is visible | none | 18 |
 | S5 | Regolith up close | 11 10cm; 11 1m | 10° / 90° | regolith only | visible fine grain; no glossy highlight; grey colour with only small variation | whether it looks like lunar regolith rather than terrestrial sand, compared against Apollo photographs | 22, 24 |
@@ -287,6 +287,10 @@ Several choices below were decided by the spec writer on the coordinator's instr
 
 None. Decisions A1 to A4 were made in place of questions; see Assumptions. Q2 (D9 combination method) was resolved as option (a): D9 stays as written and the implementer verifies it in a windowed run (REQ-6 acceptance row "D9 check").
 
+Remaining user checks (not open questions; they do not block Ready):
+- Crater dark stripe on the far wall: accepted as relief for now; user to confirm.
+- S9 near-rock look: pending user check in a live window.
+
 ## Revision history
 
 - 2026-11-11: initial spec, phases P1 to P7. Open choices decided on the coordinator's instruction (A1 to A4, marked confirm).
@@ -308,3 +312,4 @@ None. Decisions A1 to A4 were made in place of questions; see Assumptions. Q2 (D
 - 2026-11-13: Revision 17, user decision relayed by the coordinator. Large-class hull raised from 64 to 128 jittered points so large rocks read as curved boulders, not faceted polyhedra. D3 and REQ-15 updated. Ellipsoid ratio 1.3 to 1.6, exactly 2 cuts (≤ 15 % of the axis), cut faces ≤ 25 % of hull area, instance scale 0.9 to 1.1 and extent ratio ≥ 0.5 unchanged. S3 and S7 do not name the point count and are unchanged. Status Ready.
 - 2026-11-13: Revision 18, user decision relayed by the coordinator. Current large-rock look accepted. S3 and S7 pass criteria changed from curved silhouette / rounded boulder to compact boulder: no flat blade or slab, no dimension much shorter than the others, faceted but compact silhouette accepted, shadow and shaded side away from the Sun. Lit/dark, error and contact criteria unchanged. REQ-15 and D3 (128-point hull and its limits) unchanged. Status Ready.
 - 2026-11-13: Revision 19, user decision relayed by the coordinator. S7 contact criterion applies to the base contact only: no gap or hard lit seam where the base meets the soil; the silhouette edge against the soil is not judged. S7 camera named as the Sun-side view: scenario 6 with CAM ground_sun (south-east of the rock, looking north-west); the S3 view (CAM ground) is for the shadow. Brightness criterion and all other rows unchanged. Status Ready.
+- 2026-11-13: Revision 20, user decision relayed by the coordinator. S2 screenshot removed (rocks are sub-pixel at CAM high, 50 km); the automated REQ-16 density row is the S2 check. REQ-15 large-class wording changed from "rounded boulders" to "compact boulders", aligned with S3 and S7; no number changed (128 points, ratio 1.3 to 1.6, exactly 2 cuts ≤ 15 % of the axis, cut faces ≤ 25 % of area, extent ratio ≥ 0.5). Two user checks recorded under Open questions: crater far-wall dark stripe (accepted as relief for now) and S9 near-rock look (pending, live window). Status Ready.
