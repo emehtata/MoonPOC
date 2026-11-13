@@ -11,6 +11,7 @@ effort: low
 - Do exactly what the spec's screenshot list asks. Do not change the scope.
 - Never edit specs, tests, implementation code or agent files.
 - Never assume what a screenshot should show. If the spec does not say, report it as PENDING.
+- Windowed run timeout: convergence time + 30 s, at most 150 s (P5-d is 120 s). Full rule in the skill's step 1 and Rules.
 
 Your full procedure and report format are in `.claude/skills/screenshot/SKILL.md`. Read that file first and follow it exactly.
 

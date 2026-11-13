@@ -2115,7 +2115,7 @@ func test_fly_path() -> void:
 	check("REQ-28: fly path (%d frames, %.0f s): no node queued twice (%d duplicates)" % [frames, seconds, dup], dup == 0)
 	check("REQ-28: fly path: at least one cancellation (cancel_count %d)" % qt.cancel_count, qt.cancel_count >= 1)
 	# REQ-27 (Rev 13) on the 2 min run: <= 0.1 % of frames over 2 ms, and no frame over 30 ms.
-	print("REQ-27: fly path: %d frames, max_main_thread_usec %d, frames_over_2ms %d" % [frames, qt.max_main_thread_usec, qt.frames_over_budget])
+	print("REQ-27: fly path: %d frames, max_main_thread_usec %d, frames_over_2ms %d, max creation %d display %d evict %d us, select %d us, timer calls %d" % [frames, qt.max_main_thread_usec, qt.frames_over_budget, qt.max_creation_usec, qt.max_display_usec, qt.max_evict_usec, qt.max_select_usec, qt.instr_calls])
 	if seconds >= 120.0:
 		check("REQ-27: fly path: frames over 2 ms at most 0.1 %% (%d of %d)" % [qt.frames_over_budget, frames],
 			qt.frames_over_budget <= 0.001 * frames)

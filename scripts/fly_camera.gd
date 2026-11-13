@@ -27,6 +27,12 @@ const SURFACE_DEPTH := 18
 const CLOSE_SHADOW_ALTITUDE_KM := 10.0
 const CLOSE_SPLITS_KM := [0.02, 0.2, 2.0]
 const M3_SPLITS := [0.1, 0.2, 0.5]
+## Sun shadow biases. Godot scales them by the light-space depth range (20 km pancake in this km-unit scene), so the
+## defaults (0.1, 2.0) push shadows ~20 m and hide every rock and rim shadow; close to the ground use small ones.
+const CLOSE_SHADOW_BIAS := 0.003
+const CLOSE_SHADOW_NORMAL_BIAS := 0.5
+const DEFAULT_SHADOW_BIAS := 0.1
+const DEFAULT_SHADOW_NORMAL_BIAS := 2.0
 
 signal toggled(fly: bool)
 ## Emitted after the floating origin moved (near-world nodes re-place themselves).
@@ -145,6 +151,7 @@ func set_active(on: bool) -> void:
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_set_origin(Vector3.ZERO)
+		_set_bias(false)
 		active = false
 		_set_overlay(false)
 		camera.current = false
@@ -295,7 +302,14 @@ func _update_shadow(r: float, altitude: float) -> void:
 		return
 	var max_d: float = load("res://scripts/moon_camera.gd").shadow_max_distance(r)
 	_sun.directional_shadow_max_distance = max_d
+	_set_bias(altitude < CLOSE_SHADOW_ALTITUDE_KM)
 	_set_splits(CLOSE_SPLITS_KM.map(func(km): return km / max_d) if altitude < CLOSE_SHADOW_ALTITUDE_KM else M3_SPLITS)
+
+
+func _set_bias(close: bool) -> void:
+	if _sun:
+		_sun.shadow_bias = CLOSE_SHADOW_BIAS if close else DEFAULT_SHADOW_BIAS
+		_sun.shadow_normal_bias = CLOSE_SHADOW_NORMAL_BIAS if close else DEFAULT_SHADOW_NORMAL_BIAS
 
 
 func _set_splits(f: Array) -> void:

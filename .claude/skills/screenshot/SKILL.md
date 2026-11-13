@@ -10,10 +10,10 @@ description: Take windowed screenshots of the Moon project for a given scene, ca
 - If the spec has no screenshot list, stop and report NEEDS_INPUT to the orchestrator. Do not guess what to shoot.
 
 ## Steps
-1. For each screenshot entry, run the windowed scene once. Use the scenario command when the entry names a scenario:
-   `WAYLAND_DISPLAY=wayland-0 timeout 25 tools/godot/godot --display-driver wayland --path . --script scripts/scenario.gd -- <N> <CAM>`
-   For the main scene without a scenario, use `--path .` with the same display flags.
-2. Save the image to the scratchpad. A scene-side save is needed, because the window cannot be captured from outside. Use a temporary script in the scratchpad that extends the scenario script and calls `root.get_texture().get_image().save_png(<scratchpad path>)`, as the earlier screenshot runs did. Remove any temporary script from the repository afterwards.
+1. For each screenshot entry, run the windowed scene once. Use the scenario command when the entry names a scenario. T is the entry's convergence time in seconds (40 for P5-a, b, c, f; 90 for P5-d; 20 for P5-e):
+   `WAYLAND_DISPLAY=wayland-0 timeout $((T+30)) tools/godot/godot --display-driver wayland --path . --script scripts/scenario.gd -- <N> <CAM>`
+   For the main scene without a scenario, use `--path .` with the same display flags. The timeout is T+30 s (the 30 s covers startup and the save), so P5-d uses 120 s. Run the Bash tool with a timeout of 180000 ms (its default of 120 s would cut off P5-d).
+2. Save the image to the scratchpad at T seconds after the scene loads. A scene-side save is needed, because the window cannot be captured from outside. Use a temporary script in the scratchpad that extends the scenario script and, at T seconds, calls `root.get_texture().get_image().save_png(<scratchpad path>)`, as the earlier screenshot runs did. Remove any temporary script from the repository afterwards.
 3. Capture the full log of the same run. Count lines matching `create_frustum_points` and `ERROR`, and list each distinct ERROR and SCRIPT ERROR line.
 4. Open each image with the Read tool and describe what is visible: horizon, sky, terrain, rocks, craters, shadows, colour, seams, floating or buried objects, anything that looks wrong. Compare against the pass criteria in the spec entry.
 5. Mark each entry PASS only if the image meets the pass criteria and the error count is 0. Otherwise mark it FAIL and say what is wrong. Mark as pending for the user anything the image cannot settle (for example frame rate on the user's monitor).
@@ -24,7 +24,8 @@ Before judging an image, state whether the camera point is on the lit side of th
 ## Rules
 - Never edit specs, tests, implementation code or agent files.
 - Never remove or overwrite a screenshot from an earlier run without listing it in the report.
-- Keep each command under 60 seconds. Leave no Godot process running (check with pgrep).
+- Timeout for a windowed run is T+30 s (step 1), never more than 150 s. A need for longer goes back to the spec writer as a SPEC_ISSUE. Leave no Godot process running (check with pgrep).
+- Before any windowed run, run `make native` so assets/native/liblunar_terrain.so matches native/lunar-terrain/src (the procedure calls Godot directly and does not rebuild it).
 - Do not use any Fable model.
 
 ## Report format (final message)

@@ -41,6 +41,15 @@ var max_plan_usec := 0
 var create_usec_total := 0
 var max_create_usec := 0
 var frames_over_budget := 0
+# REQ-27 per-frame main-thread resource time, split by operation; each has a max.
+var max_creation_usec := 0
+var max_display_usec := 0
+var max_select_usec := 0  # _collect plus per-node error maths, excluded from REQ-27
+var max_evict_usec := 0
+var _frame_create := 0
+var _frame_display := 0
+var _frame_evict := 0
+var instr_calls := 0  # timer calls made, for the overhead report
 var build_count := 0
 var shown_count := 0
 
@@ -56,6 +65,8 @@ var _tasks := {}  # key -> {"id": int, "out": Array}
 var _wanted_build := {}
 var _last_plan_ms := 0
 var _dirty := true
+const MORPH_CAP_PER_PLAN := 24
+var _morph_left := false
 var _planned_at := Vector3.ZERO
 var _frame := 0
 var _cam := [0.0, 0.0, 0.0]
@@ -99,7 +110,7 @@ func _register_roots() -> bool:
 				var chunk := _moon.get_node_or_null("Chunk_%d_%d_%d" % [f, cx, cy]) as MeshInstance3D
 				if chunk == null:
 					return false
-				_nodes[make_key(f, 0, cx, cy)] = {"mi": chunk, "centre": [0.0, 0.0, 0.0], "bytes": 0, "used": 0, "root": true}
+				_nodes[make_key(f, 0, cx, cy)] = {"mi": chunk, "centre": [0.0, 0.0, 0.0], "bytes": 0, "used": 0, "root": true, "on": chunk.visible}
 				_shown[make_key(f, 0, cx, cy)] = true
 				if _material == null:
 					_material = chunk.mesh.surface_get_material(0)
@@ -124,6 +135,9 @@ func _process(_delta: float) -> void:
 		terrain = fly.terrain
 		_indices = terrain.node_indices()
 	_frame += 1
+	_frame_create = 0
+	_frame_display = 0
+	_frame_evict = 0
 	_update_camera()
 	_finish_builds()
 	var now := Time.get_ticks_msec()
@@ -132,6 +146,13 @@ func _process(_delta: float) -> void:
 		_last_plan_ms = now
 		_plan()
 		_planned_at = Vector3(_cam[0], _cam[1], _cam[2])
+	# One place per frame: total = creation + display + eviction, whether or not a node completed.
+	var total := _frame_create + _frame_display + _frame_evict
+	max_creation_usec = maxi(max_creation_usec, _frame_create)
+	max_display_usec = maxi(max_display_usec, _frame_display)
+	max_evict_usec = maxi(max_evict_usec, _frame_evict)
+	max_main_thread_usec = maxi(max_main_thread_usec, total)
+	frames_over_budget += int(total > MAIN_BUDGET_USEC)
 
 
 func _update_camera() -> void:
@@ -180,8 +201,11 @@ func _plan() -> void:
 	_queued = ordered
 	_start_tasks()
 	_apply_display()
+	var t2 := Time.get_ticks_usec()
 	_evict()
-	_dirty = not _queued.is_empty() or not _tasks.is_empty()
+	_frame_evict += Time.get_ticks_usec() - t2
+	instr_calls += 3
+	_dirty = _morph_left or not _queued.is_empty() or not _tasks.is_empty()
 	max_plan_usec = maxi(max_plan_usec, Time.get_ticks_usec() - plan_start)
 
 
@@ -283,9 +307,8 @@ func _finish_builds() -> void:
 	if made > 0:
 		_dirty = true
 		_start_tasks()
-		var used := Time.get_ticks_usec() - start
-		max_main_thread_usec = maxi(max_main_thread_usec, used)
-		frames_over_budget += int(used > MAIN_BUDGET_USEC)
+	_frame_create += Time.get_ticks_usec() - start
+	instr_calls += 1
 
 
 func _create_node(key: int, data: Dictionary) -> void:
@@ -309,15 +332,25 @@ func _create_node(key: int, data: Dictionary) -> void:
 
 ## Shows, for every area, the finest resident node whose replacement chain is complete.
 func _apply_display() -> void:
+	var t_sel := Time.get_ticks_usec()
 	var show := {}
 	for f in 6:
 		for cx in 4:
 			for cy in 4:
 				_collect(make_key(f, 0, cx, cy), show)
+	var morphs := 0
+	_morph_left = false
+	var t := Time.get_ticks_usec()
+	var spent := 0  # REQ-27 counts only the shader-parameter and visibility calls; collect and error maths are selection
 	for key in _nodes:
 		var e: Dictionary = _nodes[key]
 		var on := show.has(key)
-		(e["mi"] as MeshInstance3D).visible = on
+		var fresh: bool = e.get("on", false) != on
+		if fresh:  # only changed nodes pay a visibility call
+			var t0 := Time.get_ticks_usec()
+			(e["mi"] as MeshInstance3D).visible = on
+			spent += Time.get_ticks_usec() - t0
+			e["on"] = on
 		if on:
 			e["used"] = _frame
 			if not e["root"]:
@@ -325,10 +358,19 @@ func _apply_display() -> void:
 				var parent_err := 2.0 * _error_px(key)
 				var m := clampf(1.0 - (parent_err - split_px) / (split_px - merge_px), 0.0, 1.0)
 				if e.get("morph", -1.0) != m:  # unchanged values cost no resource call
+					# shortcut: later-changed morphs wait for the next plan (100 ms) once the cap is hit, raise MORPH_CAP_PER_PLAN if visible
+					if not fresh and morphs >= MORPH_CAP_PER_PLAN:
+						_morph_left = true
+						continue
+					morphs += 1
+					var t0 := Time.get_ticks_usec()
 					e["mi"].set_instance_shader_parameter("morph", m)
+					spent += Time.get_ticks_usec() - t0
 					e["morph"] = m
 	_shown = show
 	shown_count = show.size()
+	_frame_display += spent
+	max_select_usec = maxi(max_select_usec, Time.get_ticks_usec() - t_sel - spent)
 
 
 func _collect(key: int, out: Dictionary) -> bool:

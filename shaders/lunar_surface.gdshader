@@ -87,8 +87,9 @@ void fragment() {
 	ROUGHNESS = 1.0;
 	vec3 up = normalize(moon_pos);
 	float cos_lat = length(up.xz);
-	// At a pole the ENU basis is undefined: keep the interpolated vertex normal.
-	if (use_normal_map && cos_lat >= 1e-6) {
+	// At a pole the ENU basis is undefined: keep the interpolated vertex normal. Quadtree nodes (moon_offset
+	// != 0) keep the vertex normal too: it carries the craters and relief, which the offline map cannot.
+	if (use_normal_map && moon_offset == vec3(0.0) && cos_lat >= 1e-6) {
 		vec3 east = vec3(up.z, 0.0, -up.x) / cos_lat;
 		vec3 north = cross(up, east);
 		vec3 enu = normalize(texture(normal_texture, UV).rgb * 2.0 - 1.0);
@@ -102,7 +103,7 @@ void fragment() {
 		vec3 g = 0.5 * vnoise3(local_m, 0.01) + 0.3 * vnoise3(local_m + 3.1, 0.004) + 0.2 * vnoise3(local_m + 9.7, 0.0015);
 		vec3 bump = (VIEW_MATRIX * MODEL_MATRIX * vec4(g, 0.0)).xyz;
 		bump -= dot(bump, NORMAL) * NORMAL;
-		NORMAL = normalize(NORMAL + 0.5 * grain_fade * bump);
+		NORMAL = normalize(NORMAL + 0.1 * grain_fade * bump);
 	}
 }
 

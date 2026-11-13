@@ -1,6 +1,6 @@
 extends SceneTree
 ## Scenario loader (spec lunar-surface-procedural, REQ-7).
-## make scenario N=<1..11> CAM=<orbit|high|ground|1m|10cm|rock>   (HEADLESS=1 prints and exits 0)
+## make scenario N=<1..11> CAM=<orbit|high|ground|1m|10cm|rock|ground_sun|ground_sun_close>   (HEADLESS=1 prints and exits 0)
 ## Run as: godot --path . --script scripts/scenario.gd -- N CAM [SUN_EL]
 ## SUN_EL (REQ-7a, degrees -90..90) replaces the scenario's Sun elevation; the azimuth stays.
 ## Optional 4th argument PT (1-based) picks that table point of the scenario (default 1); pass SUN_EL too, e.g. 10 ground 10 2.
@@ -9,8 +9,20 @@ const MAIN_SCENE := "res://scenes/main.tscn"
 const REFERENCE_RADIUS := 1737.4
 const AU_KM := 149597870.7
 const SURFACE_DEPTH := 18
-const CAMS := ["orbit", "high", "ground", "1m", "10cm", "rock"]
+const CAMS := ["orbit", "high", "ground", "1m", "10cm", "rock", "ground_sun", "ground_sun_close"]
 ## Camera altitudes above the generated surface in metres; orbit is a distance of 6000 km.
+## Scenario 6 CAM=rock: gap from the boulder surface so the ~22 m rock fits the frame.
+const ROCK6_GAP_M := 45.0
+## Scenario 6 CAM=ground: 30 m off the boulder surface, 12 m up, pitch -15 deg: looks down so the base and the cast shadow
+## are in frame; at 75 deg vertical FOV the view spans -52..+22 deg, the 14 m top is about +3 deg.
+const ROCK6_GROUND_GAP_M := 30.0
+const ROCK6_GROUND_ALT_M := 12.0
+const ROCK6_GROUND_PITCH_DEG := -15.0
+## Scenario 6 CAM=ground_sun_close: same Sun side (yaw 315), 8 m off the boulder surface, 3 m up, pitch -15 deg: the view
+## spans -52..+22 deg, the soil at the base lies at about -20 deg, so the base contact and the soil under it fill the lower frame.
+const ROCK6_CLOSE_GAP_M := 8.0
+const ROCK6_CLOSE_ALT_M := 3.0
+const ROCK6_CLOSE_PITCH_DEG := -15.0
 const ALTITUDE_M := {"high": 50000.0, "ground": 1.7, "1m": 1.0, "10cm": 0.1, "rock": 0.3}
 const PITCH_DEG := -20.0
 const D_MIN_M := 0.5
@@ -223,28 +235,41 @@ func _setup(main: Node) -> void:
 		return
 	fly.enter()
 	if _cam == "rock":
-		_place_at_rock(fly, lat, lon)
+		_place_at_rock(fly, lat, lon, ALTITUDE_M["rock"], ROCK6_GAP_M if _n == 6 else 0.3)  # scenario 6: whole boulder in view
 		return
-	fly.place_at(lat, lon, ALTITUDE_M[_cam])
+	if _n == 6 and _cam == "ground_sun_close":  # closer Sun-side view of the base contact (S7)
+		_place_at_rock(fly, lat, lon, ROCK6_CLOSE_ALT_M, ROCK6_CLOSE_GAP_M, ROCK6_CLOSE_PITCH_DEG)
+		return
+	if _n == 6 and _cam == "ground_sun":  # Sun side (south-east, yaw 315, looks north-west): the lit east face and lit soil are in frame (S7)
+		_place_at_rock(fly, lat, lon, ROCK6_GROUND_ALT_M, ROCK6_GROUND_GAP_M, ROCK6_GROUND_PITCH_DEG)
+		return
+	if _n == 6 and _cam == "ground":  # the table point is the rock's centre: stand ROCK6_GROUND_GAP_M off its surface instead
+		_place_at_rock(fly, lat, lon, ROCK6_GROUND_ALT_M, ROCK6_GROUND_GAP_M, ROCK6_GROUND_PITCH_DEG)
+		return
+	fly.place_at(lat, lon, ALTITUDE_M["ground" if _cam.begins_with("ground_sun") else _cam])  # ground_sun only differs in scenario 6
 	fly.yaw_deg = 0.0
 	fly.pitch_deg = -90.0 if _cam == "high" else PITCH_DEG
 	fly._apply()
 
 
 ## CAM=rock: 0.3 m from the surface of the picked rock (scenario 6) or the nearest medium rock. The camera
-## stands west of the rock, a rock radius plus 0.3 m away at 0.3 m altitude, and looks east at it.
-func _place_at_rock(fly: Node3D, lat: float, lon: float) -> void:
+## stands on the Sun side (south-east of the rock, Sun in the east) and looks north-west at it, so it sees the
+## lit east faces and the shadow that falls west of the rock. `gap_m` is the distance from the rock's surface.
+func _place_at_rock(fly: Node3D, lat: float, lon: float, altitude_m: float = ALTITUDE_M["rock"], gap_m: float = 0.3, pitch_deg: float = -5.0) -> void:
 	var rock := _pick_rock(lat, lon, 0.5, [2, 1]) if _n == 6 else _nearest_medium_rock(lat, lon)
 	if rock.is_empty():
-		push_warning("no medium rock within 100 m of the point; camera placed 0.3 m above the ground")
-		fly.place_at(lat, lon, ALTITUDE_M["rock"])
+		push_warning("no medium rock within 100 m of the point; camera placed %s m above the ground" % altitude_m)
+		fly.place_at(lat, lon, altitude_m)
 		return
 	var ll := _rock_lat_lon(rock)
-	var radius_m: float = rock[19] * 0.75
-	var d_lon := rad_to_deg((radius_m + 0.3) / 1000.0 / (REFERENCE_RADIUS * cos(deg_to_rad(ll[0]))))
-	fly.place_at(ll[0], ll[1] - d_lon, ALTITUDE_M["rock"])
-	fly.yaw_deg = 90.0
-	fly.pitch_deg = -5.0
+	var dist_km: float = (rock[19] * 0.75 + gap_m) / 1000.0 * 0.7071
+	var cam_lat: float = ll[0] - rad_to_deg(dist_km / REFERENCE_RADIUS)
+	# scenario 6 ground stands south-west (looks north-east, yaw 45) so the west shadow lies left of the rock
+	var east := -1.0 if _n == 6 and _cam == "ground" else 1.0
+	var cam_lon: float = ll[1] + east * rad_to_deg(dist_km / (REFERENCE_RADIUS * cos(deg_to_rad(ll[0]))))
+	fly.place_at(cam_lat, cam_lon, altitude_m)
+	fly.yaw_deg = 45.0 if east < 0.0 else 315.0
+	fly.pitch_deg = pitch_deg
 	fly._apply()
 
 

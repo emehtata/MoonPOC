@@ -84,6 +84,8 @@ pub struct Shape {
     pub cut_faces: usize,
     /// Longest over shortest bounding-box axis.
     pub axis_ratio: f64,
+    /// Planar cut faces' share of the hull surface area.
+    pub cut_area: f64,
 }
 
 struct Gen<'a> {
@@ -184,8 +186,15 @@ fn generate(seed: u64, cat: usize, idx: usize) -> Shape {
     let mut counter = 0u64;
     for _attempt in 0..200 {
         let mut g = Gen { seed, key: (cat as u64, idx as u64), k: &mut counter };
-        let axes = [1.0, 0.45 + 0.45 * g.u(), 0.3 + 0.4 * g.u()];
-        let points: Vec<V> = (0..18)
+        // Large class (REQ-15): 64 points, ellipsoid ratio 1.3..1.6, exactly 2 cuts of at most 15% of the axis.
+        let large = cat == 2;
+        let axes = if large {
+            let short = 1.0 / (1.3 + 0.3 * g.u());
+            [1.0, short + (1.0 - short) * g.u(), short]
+        } else {
+            [1.0, 0.45 + 0.45 * g.u(), 0.3 + 0.4 * g.u()]
+        };
+        let points: Vec<V> = (0..if large { 128 } else { 18 })
             .map(|_| {
                 let d = unitv([2.0 * g.u() - 1.0, 2.0 * g.u() - 1.0, 2.0 * g.u() - 1.0 + 1e-3]);
                 let r = 0.7 + 0.3 * g.u();
@@ -193,11 +202,13 @@ fn generate(seed: u64, cat: usize, idx: usize) -> Shape {
             })
             .collect();
         let mut polys: Vec<(Vec<V>, bool)> = hull(&points).into_iter().map(|t| (t.to_vec(), false)).collect();
-        let cuts = 2 + (g.u() * 3.0) as usize; // 2 to 4
+        let cuts = if large { 2 } else { 2 + (g.u() * 3.0) as usize }; // 2 to 4
         for _ in 0..cuts {
             let d = unitv([2.0 * g.u() - 1.0, 2.0 * g.u() - 1.0, 2.0 * g.u() - 1.0 + 1e-3]);
             let reach = polys.iter().flat_map(|(p, _)| p.iter()).map(|v| dot(*v, d)).fold(f64::MIN, f64::max);
-            let o = reach * (0.55 + 0.3 * g.u());
+            let low = polys.iter().flat_map(|(p, _)| p.iter()).map(|v| dot(*v, d)).fold(f64::MAX, f64::min);
+            // Large: removes 5..15 % of the extent along the cut direction.
+            let o = if large { reach - (reach - low) * (0.05 + 0.1 * g.u()) } else { reach * (0.55 + 0.3 * g.u()) };
             let mut next = Vec::new();
             let mut on = Vec::new();
             for (poly, cut) in &polys {
@@ -224,13 +235,16 @@ fn generate(seed: u64, cat: usize, idx: usize) -> Shape {
         }
         let size = [0, 1, 2].map(|c| hi[c] - lo[c]);
         let (longest, shortest) = (size.iter().cloned().fold(f64::MIN, f64::max), size.iter().cloned().fold(f64::MAX, f64::min));
-        if cut_faces < 2 || shortest <= 1e-6 || longest / shortest < 1.3 {
+        if cut_faces < 2 || shortest <= 1e-6 || longest / shortest < 1.3 || (large && longest / shortest > 1.6) {
             continue;
         }
         let mid = [0, 1, 2].map(|c| 0.5 * (lo[c] + hi[c]));
         let norm_poly = |p: &V| [0, 1, 2].map(|c| (p[c] - mid[c]) / longest);
         let polys: Vec<(Vec<V>, bool)> = polys.into_iter().map(|(p, c)| (p.iter().map(norm_poly).collect(), c)).collect();
         let lod0 = triangulate(&polys);
+        let area = |t: &[[V; 3]]| t.iter().map(|[a, b, c]| 0.5 * norm(cross(sub(*b, *a), sub(*c, *a)))).sum::<f64>();
+        let cut_polys: Vec<_> = polys.iter().filter(|(_, c)| *c).cloned().collect();
+        let cut_area = area(&triangulate(&cut_polys)) / area(&lod0);
         let mut verts: Vec<V> = Vec::new();
         for t in &lod0 {
             for v in t {
@@ -254,14 +268,14 @@ fn generate(seed: u64, cat: usize, idx: usize) -> Shape {
         };
         let n = verts.len();
         let lods = [lod0.clone(), lod((n / 2).max(8)), lod((n / 4).max(6))];
-        return Shape { verts, lods, cut_faces, axis_ratio: longest / shortest };
+        return Shape { verts, lods, cut_faces, axis_ratio: longest / shortest, cut_area };
     }
     // 200 attempts always succeed in practice; an elongated box keeps the invariants if not.
     let b = [[-0.5, -0.2, -0.1], [0.5, 0.2, 0.1]];
     let c = |x: usize, y: usize, z: usize| [b[x][0], b[y][1], b[z][2]];
     let verts: Vec<V> = (0..8).map(|i| c(i & 1, (i >> 1) & 1, (i >> 2) & 1)).collect();
     let tris = hull(&verts);
-    Shape { verts, lods: [tris.clone(), tris.clone(), tris], cut_faces: 6, axis_ratio: 5.0 }
+    Shape { verts, lods: [tris.clone(), tris.clone(), tris], cut_faces: 6, axis_ratio: 5.0, cut_area: 0.0 }
 }
 
 /// The base mesh `idx` (0..32) of category `cat`, generated from the seed and cached.
@@ -395,7 +409,8 @@ fn place(seed: u64, cfg: &RockConfig, cat: usize, b: usize, id: FeatureId, p: V,
     let (lo, hi) = (cfg.edge_m(cat, b), cfg.edge_m(cat, b + 1));
     let d_m = lo * (hi / lo).powf(attr(seed, id, 2));
     let rot = quat_basis([attr(seed, id, 3), attr(seed, id, 4), attr(seed, id, 5)]);
-    let sc = [0.6 + 0.8 * attr(seed, id, 6), 0.6 + 0.8 * attr(seed, id, 7), 0.6 + 0.8 * attr(seed, id, 8)];
+    let (smin, sspan) = if cat == 2 { (0.9, 0.2) } else { (0.6, 0.8) };
+    let sc = [smin + sspan * attr(seed, id, 6), smin + sspan * attr(seed, id, 7), smin + sspan * attr(seed, id, 8)];
     let sink = 0.2 + 0.2 * attr(seed, id, 9);
     // Local-frame (east, north, up) vertices in metres.
     let local: Vec<V> = sh
@@ -449,6 +464,22 @@ mod tests {
                 assert!(s.lods.iter().all(|l| l.len() >= 4));
             }
         }
+    }
+
+    #[test]
+    fn large_rocks_are_blocky_with_small_cut_faces() {
+        let (mut lo, mut hi, mut amax) = (f64::MAX, f64::MIN, 0.0f64);
+        for idx in 0..MESHES {
+            let s = shape(3, 2, idx);
+            lo = lo.min(s.axis_ratio);
+            hi = hi.max(s.axis_ratio);
+            amax = amax.max(s.cut_area);
+            assert!(s.cut_area <= 0.25, "mesh {idx}: cut area {}", s.cut_area);
+            assert_eq!(s.cut_faces, 2, "mesh {idx}: exactly 2 cuts");
+            assert!(s.axis_ratio >= 1.3 - 1e-9 && s.axis_ratio <= 1.6 + 1e-9, "mesh {idx}: ratio {}", s.axis_ratio);
+            assert!(1.0 / (s.axis_ratio * 1.1 / 0.9) >= 0.5 - 1e-9, "mesh {idx}: scaled ratio");
+        }
+        println!("LARGE ratio {lo:.3}..{hi:.3} at scale limit {:.3}..{:.3} cut area max {amax:.3}", 0.9 / (hi * 1.1), 1.0 / (lo * 1.1 / 0.9));
     }
 
     #[test]
